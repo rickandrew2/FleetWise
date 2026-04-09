@@ -2,6 +2,7 @@ package com.fleetwise.route;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
@@ -24,6 +25,16 @@ public interface RouteLogRepository extends JpaRepository<RouteLog, UUID> {
             @Param("driverId") UUID driverId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
+
+    @Query("""
+            select r from RouteLog r
+            where (:driverId is null or r.driverId = :driverId)
+              and r.efficiencyScore is not null
+            order by r.efficiencyScore asc, r.createdAt desc
+            """)
+    List<RouteLog> findTopInefficient(
+            @Param("driverId") UUID driverId,
+            Pageable pageable);
 
     Optional<RouteLog> findByIdAndDriverId(UUID id, UUID driverId);
 }
