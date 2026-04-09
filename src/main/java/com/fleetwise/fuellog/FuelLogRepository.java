@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -26,4 +27,15 @@ public interface FuelLogRepository extends JpaRepository<FuelLog, UUID> {
             @Param("endDate") LocalDate endDate);
 
     Optional<FuelLog> findByIdAndDriverId(UUID id, UUID driverId);
+
+    @Query("""
+            select coalesce(sum(f.litersFilled), 0) from FuelLog f
+            where f.logDate = :logDate
+              and f.vehicleId = :vehicleId
+              and f.driverId = :driverId
+            """)
+    BigDecimal sumLitersFilledForTrip(
+            @Param("logDate") LocalDate logDate,
+            @Param("vehicleId") UUID vehicleId,
+            @Param("driverId") UUID driverId);
 }

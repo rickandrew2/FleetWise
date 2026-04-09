@@ -4,6 +4,11 @@ This guide explains how FleetWise is built, using comparisons to the stack you a
 
 Scope note: this document focuses on the application itself (API, security, data, modules, request flow). It intentionally does not explain agent/AI-skill documentation.
 
+Quick companion:
+
+- If you want the simplest possible version first, read `agent-docs/NODEJS_TO_SPRING_ELI5_CHEATSHEET.md`.
+- If you want a visual 2-minute request flow, read `agent-docs/REQUEST_FLOW_VISUAL_QUICKSTART.md`.
+
 ## 1. What You Are Looking At
 
 FleetWise backend is a Spring Boot 3 API using Java 17, PostgreSQL, Flyway migrations, JWT auth, and role-based authorization.

@@ -1,8 +1,9 @@
-package com.fleetwise.fuellog;
+package com.fleetwise.route;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetwise.route.RouteLogRepository;
+import com.fleetwise.fuellog.FuelLog;
+import com.fleetwise.fuellog.FuelLogRepository;
 import com.fleetwise.user.User;
 import com.fleetwise.user.UserRepository;
 import com.fleetwise.user.UserRole;
@@ -18,7 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.util.UUID;
+import java.time.LocalDate;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class FuelLogControllerIntegrationTest {
+class RouteLogControllerIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -69,11 +70,12 @@ class FuelLogControllerIntegrationTest {
         driverUser = seedUser("driver@fleetwise.test", UserRole.DRIVER);
         secondDriverUser = seedUser("driver2@fleetwise.test", UserRole.DRIVER);
         vehicle = seedVehicle();
+        seedFuelLog(vehicle, driverUser, LocalDate.of(2026, 4, 11), new BigDecimal("18.00"));
     }
 
     @Test
-    void shouldEnforceFuelLogAuthorizationAndCrud() throws Exception {
-        mockMvc.perform(get("/api/fuel-logs"))
+    void shouldEnforceRouteLogAuthorizationAndCrud() throws Exception {
+        mockMvc.perform(get("/api/routes"))
                 .andExpect(status().isUnauthorized());
 
         String driverToken = loginAndGetToken(driverUser.getEmail(), "StrongPass123");
@@ -82,18 +84,17 @@ class FuelLogControllerIntegrationTest {
                 {
                   "vehicleId": "%s",
                   "driverId": "%s",
-                  "logDate": "2026-04-09",
-                  "odometerReadingKm": 1234.5,
-                  "litersFilled": 20.0,
-                  "pricePerLiter": 65.5,
-                  "stationName": "Station A",
-                  "stationLat": 13.7565,
-                  "stationLng": 121.0583,
-                  "notes": "test"
+                  "tripDate": "2026-04-11",
+                  "originLabel": "Batangas City",
+                  "originLat": 13.7565,
+                  "originLng": 121.0583,
+                  "destinationLabel": "Lipa City",
+                  "destinationLat": 13.9411,
+                  "destinationLng": 121.1636
                 }
                 """.formatted(vehicle.getId(), secondDriverUser.getId());
 
-        mockMvc.perform(post("/api/fuel-logs")
+        mockMvc.perform(post("/api/routes")
                 .header("Authorization", "Bearer " + driverToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(forbiddenDriverPayload))
@@ -102,80 +103,81 @@ class FuelLogControllerIntegrationTest {
         String driverPayload = """
                 {
                   "vehicleId": "%s",
-                  "logDate": "2026-04-09",
-                  "odometerReadingKm": 1500.0,
-                  "litersFilled": 30.0,
-                  "pricePerLiter": 65.5,
-                  "stationName": "Station Driver",
-                  "stationLat": 13.7000,
-                  "stationLng": 121.0500,
-                  "notes": "driver log"
+                  "tripDate": "2026-04-11",
+                  "originLabel": "Batangas City",
+                  "originLat": 13.7565,
+                  "originLng": 121.0583,
+                  "destinationLabel": "Lipa City",
+                  "destinationLat": 13.9411,
+                  "destinationLng": 121.1636
                 }
                 """.formatted(vehicle.getId());
 
-        String driverCreateResponse = mockMvc.perform(post("/api/fuel-logs")
+        String driverCreateResponse = mockMvc.perform(post("/api/routes")
                 .header("Authorization", "Bearer " + driverToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(driverPayload))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.driverId").value(driverUser.getId().toString()))
-                .andExpect(jsonPath("$.totalCost").value(1965.0))
+                .andExpect(jsonPath("$.distanceKm").isNumber())
+                .andExpect(jsonPath("$.actualFuelUsedLiters").value(18.0))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
-        String driverFuelLogId = objectMapper.readTree(driverCreateResponse).get("id").asText();
+        String driverRouteLogId = objectMapper.readTree(driverCreateResponse).get("id").asText();
 
         String managerToken = loginAndGetToken(managerUser.getEmail(), "StrongPass123");
+
         String managerPayload = """
                 {
                   "vehicleId": "%s",
                   "driverId": "%s",
-                  "logDate": "2026-04-10",
-                  "odometerReadingKm": 1600.0,
-                  "litersFilled": 10.0,
-                  "pricePerLiter": 70.0,
-                  "stationName": "Station Manager",
-                  "stationLat": 13.6800,
-                  "stationLng": 121.0400,
-                  "notes": "manager log"
+                  "tripDate": "2026-04-12",
+                  "originLabel": "Tanauan",
+                  "originLat": 14.0837,
+                  "originLng": 121.1490,
+                  "destinationLabel": "Calamba",
+                  "destinationLat": 14.2117,
+                  "destinationLng": 121.1653,
+                  "actualFuelUsedLiters": 12.5
                 }
                 """.formatted(vehicle.getId(), secondDriverUser.getId());
 
-        String managerCreateResponse = mockMvc.perform(post("/api/fuel-logs")
+        String managerCreateResponse = mockMvc.perform(post("/api/routes")
                 .header("Authorization", "Bearer " + managerToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(managerPayload))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.driverId").value(secondDriverUser.getId().toString()))
-                .andExpect(jsonPath("$.totalCost").value(700.0))
+                .andExpect(jsonPath("$.actualFuelUsedLiters").value(12.5))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
-        String managerFuelLogId = objectMapper.readTree(managerCreateResponse).get("id").asText();
+        String managerRouteLogId = objectMapper.readTree(managerCreateResponse).get("id").asText();
 
-        mockMvc.perform(get("/api/fuel-logs")
+        mockMvc.perform(get("/api/routes")
                 .header("Authorization", "Bearer " + driverToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(driverFuelLogId));
+                .andExpect(jsonPath("$[0].id").value(driverRouteLogId));
 
-        mockMvc.perform(get("/api/fuel-logs/stats")
+        mockMvc.perform(get("/api/routes/stats")
                 .header("Authorization", "Bearer " + driverToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalLogs").value(1))
-                .andExpect(jsonPath("$.totalCost").value(1965.0));
+                .andExpect(jsonPath("$.totalTrips").value(1))
+                .andExpect(jsonPath("$.totalDistanceKm").isNumber());
 
-        mockMvc.perform(get("/api/fuel-logs/" + managerFuelLogId)
+        mockMvc.perform(get("/api/routes/" + managerRouteLogId)
                 .header("Authorization", "Bearer " + driverToken))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(delete("/api/fuel-logs/" + managerFuelLogId)
+        mockMvc.perform(delete("/api/routes/" + managerRouteLogId)
                 .header("Authorization", "Bearer " + managerToken))
                 .andExpect(status().isForbidden());
 
         String adminToken = loginAndGetToken(adminUser.getEmail(), "StrongPass123");
-        mockMvc.perform(delete("/api/fuel-logs/" + managerFuelLogId)
+        mockMvc.perform(delete("/api/routes/" + managerRouteLogId)
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
     }
@@ -190,14 +192,26 @@ class FuelLogControllerIntegrationTest {
     }
 
     private Vehicle seedVehicle() {
-        Vehicle vehicle = new Vehicle();
-        vehicle.setPlateNumber("FUEL-001");
-        vehicle.setMake("Toyota");
-        vehicle.setModel("Hilux");
-        vehicle.setYear(2022);
-        vehicle.setFuelType("Diesel");
-        vehicle.setTankCapacityLiters(new BigDecimal("70.00"));
-        return vehicleRepository.save(vehicle);
+        Vehicle seededVehicle = new Vehicle();
+        seededVehicle.setPlateNumber("ROUTE-001");
+        seededVehicle.setMake("Toyota");
+        seededVehicle.setModel("Hilux");
+        seededVehicle.setYear(2022);
+        seededVehicle.setFuelType("Diesel");
+        seededVehicle.setTankCapacityLiters(new BigDecimal("70.00"));
+        seededVehicle.setCombinedMpg(new BigDecimal("25.00"));
+        return vehicleRepository.save(seededVehicle);
+    }
+
+    private void seedFuelLog(Vehicle seededVehicle, User driver, LocalDate logDate, BigDecimal litersFilled) {
+        FuelLog fuelLog = new FuelLog();
+        fuelLog.setVehicleId(seededVehicle.getId());
+        fuelLog.setDriverId(driver.getId());
+        fuelLog.setLogDate(logDate);
+        fuelLog.setLitersFilled(litersFilled);
+        fuelLog.setPricePerLiter(new BigDecimal("65.00"));
+        fuelLog.setTotalCost(litersFilled.multiply(new BigDecimal("65.00")));
+        fuelLogRepository.save(fuelLog);
     }
 
     private String loginAndGetToken(String email, String password) throws Exception {

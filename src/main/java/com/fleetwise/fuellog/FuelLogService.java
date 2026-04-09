@@ -1,5 +1,6 @@
 package com.fleetwise.fuellog;
 
+import com.fleetwise.alert.AlertService;
 import com.fleetwise.fuellog.dto.FuelLogResponse;
 import com.fleetwise.fuellog.dto.FuelLogStatsResponse;
 import com.fleetwise.fuellog.dto.FuelLogUpsertRequest;
@@ -25,6 +26,7 @@ public class FuelLogService {
     private final FuelLogRepository fuelLogRepository;
     private final VehicleRepository vehicleRepository;
     private final UserRepository userRepository;
+    private final AlertService alertService;
 
     @Transactional(readOnly = true)
     public List<FuelLogResponse> getFuelLogs(String currentEmail,
@@ -87,7 +89,10 @@ public class FuelLogService {
         fuelLog.setStationLng(toDecimal(request.stationLng(), 7));
         fuelLog.setNotes(trimToNull(request.notes()));
 
-        return toResponse(fuelLogRepository.save(fuelLog));
+        FuelLog savedFuelLog = fuelLogRepository.save(fuelLog);
+        alertService.checkFuelLog(savedFuelLog);
+
+        return toResponse(savedFuelLog);
     }
 
     @Transactional

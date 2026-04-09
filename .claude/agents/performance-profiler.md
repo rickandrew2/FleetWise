@@ -1,7 +1,7 @@
 ---
 name: performance-profiler
 description: Use when diagnosing latency, memory, CPU, or build-time bottlenecks and producing measurable optimization plans with before/after evidence.
-tools: ["Read", "Grep", "Glob", "Bash"]
+tools: ["Read", "Grep", "Glob", "Bash", "Edit"]
 model: sonnet
 ---
 

@@ -69,3 +69,24 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Fix**: Added `function mvnw { & (Join-Path (Get-Location) 'mvnw.cmd') @args }` to `$PROFILE`, reloaded profile, and verified `mvnw -version`.
 - **Avoid**: Do not rely on session-only alias when you need persistent command behavior.
 - **Date**: 2026-04-08
+
+### [TYPE] Hibernate schema validation mismatch on DECIMAL columns
+- **Symptom**: Tests failed with `Schema-validation: wrong column type ... found DECIMAL, but expecting FLOAT` for `vehicles` MPG columns.
+- **Root Cause**: JPA entity used `Double` while migration defined `DECIMAL`.
+- **Fix**: Changed entity numeric fields to `BigDecimal` and converted at service DTO boundaries.
+- **Avoid**: Keep Java numeric types aligned with SQL column definitions, especially when using `ddl-auto=validate`.
+- **Date**: 2026-04-09
+
+### [DB] Integration tests fail after adding new foreign keys
+- **Symptom**: `DataIntegrityViolationException` when `VehicleControllerIntegrationTest` cleanup deleted vehicles before dependent fuel logs.
+- **Root Cause**: New FK from `fuel_logs.vehicle_id` to `vehicles.id` enforced referential integrity.
+- **Fix**: Delete dependent records first in test setup (`fuelLogRepository.deleteAll()` before `vehicleRepository.deleteAll()`).
+- **Avoid**: Revisit test fixture cleanup order after introducing new FK constraints.
+- **Date**: 2026-04-09
+
+### [OTHER] Auth integration test collided with seeded users from other module tests
+- **Symptom**: Full suite run failed with `400` on register in `AuthIntegrationTest`, while targeted auth tests previously passed.
+- **Root Cause**: Hardcoded email (`driver@fleetwise.test`) conflicted with users seeded by other integration tests sharing the same application context/database.
+- **Fix**: Generate a unique test email per run using `UUID` in `AuthIntegrationTest` request payloads and assertions.
+- **Avoid**: Do not hardcode globally reused identifiers in integration tests that run with shared test state.
+- **Date**: 2026-04-09

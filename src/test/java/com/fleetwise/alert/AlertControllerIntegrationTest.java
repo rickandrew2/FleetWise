@@ -1,7 +1,8 @@
-package com.fleetwise.fuellog;
+package com.fleetwise.alert;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetwise.fuellog.FuelLogRepository;
 import com.fleetwise.route.RouteLogRepository;
 import com.fleetwise.user.User;
 import com.fleetwise.user.UserRepository;
@@ -18,17 +19,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class FuelLogControllerIntegrationTest {
+class AlertControllerIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,6 +49,9 @@ class FuelLogControllerIntegrationTest {
     private RouteLogRepository routeLogRepository;
 
     @Autowired
+    private AlertRepository alertRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private User adminUser;
@@ -59,6 +62,7 @@ class FuelLogControllerIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        alertRepository.deleteAll();
         routeLogRepository.deleteAll();
         fuelLogRepository.deleteAll();
         vehicleRepository.deleteAll();
@@ -72,112 +76,94 @@ class FuelLogControllerIntegrationTest {
     }
 
     @Test
-    void shouldEnforceFuelLogAuthorizationAndCrud() throws Exception {
-        mockMvc.perform(get("/api/fuel-logs"))
+    void shouldGenerateAndManageAlertsWithRoleRules() throws Exception {
+        mockMvc.perform(get("/api/alerts"))
                 .andExpect(status().isUnauthorized());
 
         String driverToken = loginAndGetToken(driverUser.getEmail(), "StrongPass123");
 
-        String forbiddenDriverPayload = """
+        String highCostFillupPayload = """
                 {
                   "vehicleId": "%s",
-                  "driverId": "%s",
-                  "logDate": "2026-04-09",
-                  "odometerReadingKm": 1234.5,
-                  "litersFilled": 20.0,
-                  "pricePerLiter": 65.5,
-                  "stationName": "Station A",
-                  "stationLat": 13.7565,
-                  "stationLng": 121.0583,
-                  "notes": "test"
+                                                                        "logDate": "2026-04-15",
+                  "odometerReadingKm": 5000.0,
+                  "litersFilled": 100.0,
+                  "pricePerLiter": 100.0,
+                  "stationName": "Very Expensive Station"
                 }
-                """.formatted(vehicle.getId(), secondDriverUser.getId());
+                """.formatted(vehicle.getId());
 
         mockMvc.perform(post("/api/fuel-logs")
                 .header("Authorization", "Bearer " + driverToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(forbiddenDriverPayload))
+                .content(highCostFillupPayload))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/alerts")
+                .header("Authorization", "Bearer " + driverToken)
+                .param("isRead", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].alertType").exists())
+                .andExpect(jsonPath("$[0].driverId").value(driverUser.getId().toString()));
+
+        mockMvc.perform(get("/api/alerts/unread-count")
+                .header("Authorization", "Bearer " + driverToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(2));
+
+        mockMvc.perform(get("/api/alerts")
+                .header("Authorization", "Bearer " + driverToken)
+                .param("driverId", secondDriverUser.getId().toString()))
                 .andExpect(status().isBadRequest());
 
-        String driverPayload = """
-                {
-                  "vehicleId": "%s",
-                  "logDate": "2026-04-09",
-                  "odometerReadingKm": 1500.0,
-                  "litersFilled": 30.0,
-                  "pricePerLiter": 65.5,
-                  "stationName": "Station Driver",
-                  "stationLat": 13.7000,
-                  "stationLng": 121.0500,
-                  "notes": "driver log"
-                }
-                """.formatted(vehicle.getId());
-
-        String driverCreateResponse = mockMvc.perform(post("/api/fuel-logs")
-                .header("Authorization", "Bearer " + driverToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(driverPayload))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.driverId").value(driverUser.getId().toString()))
-                .andExpect(jsonPath("$.totalCost").value(1965.0))
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        String driverFuelLogId = objectMapper.readTree(driverCreateResponse).get("id").asText();
-
         String managerToken = loginAndGetToken(managerUser.getEmail(), "StrongPass123");
-        String managerPayload = """
+
+        String inefficientRoutePayload = """
                 {
                   "vehicleId": "%s",
                   "driverId": "%s",
-                  "logDate": "2026-04-10",
-                  "odometerReadingKm": 1600.0,
-                  "litersFilled": 10.0,
-                  "pricePerLiter": 70.0,
-                  "stationName": "Station Manager",
-                  "stationLat": 13.6800,
-                  "stationLng": 121.0400,
-                  "notes": "manager log"
+                  "tripDate": "2026-04-16",
+                  "originLabel": "A",
+                  "originLat": 13.7565,
+                  "originLng": 121.0583,
+                  "destinationLabel": "B",
+                  "destinationLat": 13.9411,
+                  "destinationLng": 121.1636,
+                  "actualFuelUsedLiters": 20.0
                 }
                 """.formatted(vehicle.getId(), secondDriverUser.getId());
 
-        String managerCreateResponse = mockMvc.perform(post("/api/fuel-logs")
+        mockMvc.perform(post("/api/routes")
                 .header("Authorization", "Bearer " + managerToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(managerPayload))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.driverId").value(secondDriverUser.getId().toString()))
-                .andExpect(jsonPath("$.totalCost").value(700.0))
+                .content(inefficientRoutePayload))
+                .andExpect(status().isCreated());
+
+        String overconsumptionAlertsResponse = mockMvc.perform(get("/api/alerts")
+                .header("Authorization", "Bearer " + managerToken)
+                .param("alertType", AlertType.OVERCONSUMPTION.name())
+                .param("driverId", secondDriverUser.getId().toString())
+                .param("isRead", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].alertType").value("OVERCONSUMPTION"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
-        String managerFuelLogId = objectMapper.readTree(managerCreateResponse).get("id").asText();
+        JsonNode jsonNode = objectMapper.readTree(overconsumptionAlertsResponse);
+        String overconsumptionAlertId = jsonNode.get(0).get("id").asText();
 
-        mockMvc.perform(get("/api/fuel-logs")
-                .header("Authorization", "Bearer " + driverToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(driverFuelLogId));
-
-        mockMvc.perform(get("/api/fuel-logs/stats")
-                .header("Authorization", "Bearer " + driverToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalLogs").value(1))
-                .andExpect(jsonPath("$.totalCost").value(1965.0));
-
-        mockMvc.perform(get("/api/fuel-logs/" + managerFuelLogId)
-                .header("Authorization", "Bearer " + driverToken))
-                .andExpect(status().isNotFound());
-
-        mockMvc.perform(delete("/api/fuel-logs/" + managerFuelLogId)
+        mockMvc.perform(put("/api/alerts/" + overconsumptionAlertId + "/read")
                 .header("Authorization", "Bearer " + managerToken))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isRead").value(true));
 
         String adminToken = loginAndGetToken(adminUser.getEmail(), "StrongPass123");
-        mockMvc.perform(delete("/api/fuel-logs/" + managerFuelLogId)
+
+        mockMvc.perform(get("/api/alerts/unread-count")
                 .header("Authorization", "Bearer " + adminToken))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(2));
     }
 
     private User seedUser(String email, UserRole role) {
@@ -190,14 +176,15 @@ class FuelLogControllerIntegrationTest {
     }
 
     private Vehicle seedVehicle() {
-        Vehicle vehicle = new Vehicle();
-        vehicle.setPlateNumber("FUEL-001");
-        vehicle.setMake("Toyota");
-        vehicle.setModel("Hilux");
-        vehicle.setYear(2022);
-        vehicle.setFuelType("Diesel");
-        vehicle.setTankCapacityLiters(new BigDecimal("70.00"));
-        return vehicleRepository.save(vehicle);
+        Vehicle seededVehicle = new Vehicle();
+        seededVehicle.setPlateNumber("ALERT-001");
+        seededVehicle.setMake("Toyota");
+        seededVehicle.setModel("Hilux");
+        seededVehicle.setYear(2022);
+        seededVehicle.setFuelType("Diesel");
+        seededVehicle.setTankCapacityLiters(new BigDecimal("70.00"));
+        seededVehicle.setCombinedMpg(new BigDecimal("25.00"));
+        return vehicleRepository.save(seededVehicle);
     }
 
     private String loginAndGetToken(String email, String password) throws Exception {

@@ -856,6 +856,9 @@ Update workflow:
 | 2026-04-08 | Architecture + setup | Added explicit architecture choice (layered modular monolith) and linked VS Code Windows setup guide. |
 | 2026-04-08 | Milestone 1 bootstrap | Added initial Spring Boot scaffold (auth baseline, migration, Docker DB config, VS Code setup assets). |
 | 2026-04-08 | Build tooling | Adopted Maven Wrapper-first workflow and validated build/tests via wrapper. |
+| 2026-04-09 | Module 3 Fuel Logs | Implemented fuel log migration/entity/repository/service/controller with role-aware access and integration tests. |
+| 2026-04-09 | Module 4 Route Logs | Implemented route log migration/entity/repository/service/controller with distance estimation, efficiency scoring, and integration tests. |
+| 2026-04-09 | Module 5 Alerts | Implemented alert migration/entity/repository/service/controller with HIGH_COST, UNUSUAL_FILLUP, and OVERCONSUMPTION triggers plus alert integration tests. |
 
 ---
 
