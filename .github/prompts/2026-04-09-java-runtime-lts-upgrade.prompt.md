@@ -28,6 +28,6 @@ Upgrade Java runtime target to Java 25 (latest LTS) and align build tooling/runt
 
 ## Status
 
-- [ ] Not started / [x] In progress / [ ] Complete
+- [ ] Not started / [ ] In progress / [x] Complete
       Blockers (if any):
 - None

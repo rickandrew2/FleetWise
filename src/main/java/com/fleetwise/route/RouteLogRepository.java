@@ -13,28 +13,28 @@ import java.util.UUID;
 public interface RouteLogRepository extends JpaRepository<RouteLog, UUID> {
 
     @Query("""
-            select r from RouteLog r
-            where (:vehicleId is null or r.vehicleId = :vehicleId)
-              and (:driverId is null or r.driverId = :driverId)
-              and (:startDate is null or r.tripDate >= :startDate)
-              and (:endDate is null or r.tripDate <= :endDate)
-            order by r.tripDate desc, r.createdAt desc
-            """)
+      select r from RouteLog r
+      where (:vehicleId is null or r.vehicleId = :vehicleId)
+        and (:driverId is null or r.driverId = :driverId)
+        and (:startDate is null or r.tripDate >= :startDate)
+        and (:endDate is null or r.tripDate <= :endDate)
+      order by r.tripDate desc, r.createdAt desc
+      """)
     List<RouteLog> findFiltered(
-            @Param("vehicleId") UUID vehicleId,
-            @Param("driverId") UUID driverId,
-            @Param("startDate") LocalDate startDate,
-            @Param("endDate") LocalDate endDate);
+      @Param("vehicleId") UUID vehicleId,
+      @Param("driverId") UUID driverId,
+      @Param("startDate") LocalDate startDate,
+      @Param("endDate") LocalDate endDate);
 
     @Query("""
-            select r from RouteLog r
-            where (:driverId is null or r.driverId = :driverId)
-              and r.efficiencyScore is not null
-            order by r.efficiencyScore asc, r.createdAt desc
-            """)
+      select r from RouteLog r
+      where (:driverId is null or r.driverId = :driverId)
+        and r.efficiencyScore is not null
+      order by r.efficiencyScore asc, r.createdAt desc
+      """)
     List<RouteLog> findTopInefficient(
-            @Param("driverId") UUID driverId,
-            Pageable pageable);
+      @Param("driverId") UUID driverId,
+      Pageable pageable);
 
     Optional<RouteLog> findByIdAndDriverId(UUID id, UUID driverId);
 }

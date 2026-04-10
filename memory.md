@@ -90,3 +90,24 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Fix**: Generate a unique test email per run using `UUID` in `AuthIntegrationTest` request payloads and assertions.
 - **Avoid**: Do not hardcode globally reused identifiers in integration tests that run with shared test state.
 - **Date**: 2026-04-09
+
+### [BUILD] Missing report dependencies caused baseline compile failure
+- **Symptom**: `mvn clean test-compile` failed with missing packages `org.apache.poi.*` and `com.lowagie.text.*`.
+- **Root Cause**: `pom.xml` did not include `poi-ooxml` and `openpdf` dependencies required by report generator classes already in source.
+- **Fix**: Added `org.apache.poi:poi-ooxml:5.3.0` and `com.github.librepdf:openpdf:1.3.41` back to `pom.xml` and re-ran compile.
+- **Avoid**: Keep dependency declarations aligned with newly added feature modules before merging to main branch.
+- **Date**: 2026-04-10
+
+### [BUILD] Service-repository contract drift broke compilation
+- **Symptom**: Compile failed with `cannot find symbol method findTopInefficient(...)` in `ReportService`.
+- **Root Cause**: `ReportService` called `RouteLogRepository.findTopInefficient` but repository interface did not define the method.
+- **Fix**: Added `findTopInefficient(UUID, Pageable)` JPQL query method to `RouteLogRepository`.
+- **Avoid**: Add or update repository interfaces in the same change set when introducing new service query calls.
+- **Date**: 2026-04-10
+
+### [BUILD] Java 25 required explicit Lombok processor configuration
+- **Symptom**: Java 25 compile surfaced Lombok processing failures until processor wiring was explicit.
+- **Root Cause**: Implicit annotation processing setup was brittle under the upgraded toolchain.
+- **Fix**: Added `lombok.version` property, pinned Lombok `1.18.44`, and configured `maven-compiler-plugin` `annotationProcessorPaths` for Lombok.
+- **Avoid**: For latest JDK upgrades, explicitly configure annotation processors instead of relying on implicit behavior.
+- **Date**: 2026-04-10
