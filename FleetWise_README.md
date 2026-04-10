@@ -68,8 +68,8 @@ A logistics company with 20–100+ vehicles spends a massive portion of operatin
 
 | Layer | Technology | Version | Purpose |
 |---|---|---|---|
-| Language | Java | 17+ (LTS) | Core language |
-| Framework | Spring Boot | 3.x | Application framework |
+| Language | Java | 25 (LTS) | Core language |
+| Framework | Spring Boot | 3.5.13 | Application framework |
 | Security | Spring Security + JWT | 6.x | Auth & authorization |
 | ORM | Spring Data JPA + Hibernate | 3.x | Database access layer |
 | Database | PostgreSQL + PostGIS | 15+ | Primary DB + geospatial |
@@ -78,7 +78,7 @@ A logistics company with 20–100+ vehicles spends a massive portion of operatin
 | Vehicle Data | FuelEconomy.gov REST API | - | Real MPG data (free, no key) |
 | PDF Reports | iText / OpenPDF | 8.x | PDF payslips & reports |
 | Excel Reports | Apache POI | 5.x | Excel export |
-| API Docs | SpringDoc OpenAPI (Swagger) | 2.x | Auto API documentation |
+| API Docs | SpringDoc OpenAPI (Swagger) | 2.8.9 | Auto API documentation |
 | Testing | JUnit 5 + Mockito | - | Unit & integration tests |
 | Containerization | Docker + Docker Compose | - | Local & prod environment |
 | CI/CD | GitHub Actions | - | Automated test & deploy |
@@ -776,7 +776,7 @@ graphhopper:
 ## Running the Project
 
 ### Prerequisites
-- Java 17+
+- Java 25+
 - Docker + Docker Compose
 - Maven
 
@@ -809,7 +809,7 @@ docker-compose up --build
 
 Use [DEV_SETUP_WINDOWS.md](DEV_SETUP_WINDOWS.md) for first-time setup of:
 
-- JDK 17
+- JDK 25
 - Maven
 - Docker Desktop
 - Recommended VS Code extensions
@@ -859,6 +859,7 @@ Update workflow:
 | 2026-04-09 | Module 3 Fuel Logs | Implemented fuel log migration/entity/repository/service/controller with role-aware access and integration tests. |
 | 2026-04-09 | Module 4 Route Logs | Implemented route log migration/entity/repository/service/controller with distance estimation, efficiency scoring, and integration tests. |
 | 2026-04-09 | Module 5 Alerts | Implemented alert migration/entity/repository/service/controller with HIGH_COST, UNUSUAL_FILLUP, and OVERCONSUMPTION triggers plus alert integration tests. |
+| 2026-04-10 | Runtime + security maintenance | Upgraded runtime to Java 25 LTS, aligned Spring Boot to 3.5.13 and SpringDoc to 2.8.9, and verified no known direct-dependency CVEs. |
 
 ---
 
@@ -870,7 +871,7 @@ Once complete, use these on your resume under Projects:
 > Built a production-grade fleet management backend using Spring Boot 3, Spring Security (JWT), and PostgreSQL — integrating the FuelEconomy.gov API for real vehicle MPG data and GraphHopper for route distance calculation. Implemented a rule-based alert engine for fuel overconsumption detection, a driver efficiency scoring system, and automated weekly/monthly PDF and Excel report generation via Spring Batch, iText, and Apache POI. Containerized with Docker and deployed via GitHub Actions CI/CD.
 
 **Tech keywords that will appear on your resume (enterprise-friendly):**
-`Java 17` `Spring Boot 3` `Spring Security` `JWT` `Spring Batch` `Spring Data JPA` `Hibernate` `PostgreSQL` `PostGIS` `RESTful API` `GraphHopper` `iText` `Apache POI` `Docker` `GitHub Actions` `JUnit 5` `Mockito` `OpenAPI / Swagger` `CI/CD`
+`Java 25` `Spring Boot 3.5` `Spring Security` `JWT` `Spring Batch` `Spring Data JPA` `Hibernate` `PostgreSQL` `PostGIS` `RESTful API` `GraphHopper` `iText` `Apache POI` `Docker` `GitHub Actions` `JUnit 5` `Mockito` `OpenAPI / Swagger` `CI/CD`
 
 ---
 

@@ -7,7 +7,7 @@ This guide sets up everything needed to build FleetWise locally.
 Install these first:
 
 1. Git
-2. JDK 17 (LTS)
+2. JDK 25 (LTS)
 3. Docker Desktop
 4. VS Code
 
@@ -19,7 +19,7 @@ If you use winget, run:
 
 ```powershell
 winget install -e --id Git.Git
-winget install -e --id EclipseAdoptium.Temurin.17.JDK
+winget install -e --id EclipseAdoptium.Temurin.25.JDK
 winget install -e --id Docker.DockerDesktop
 winget install -e --id Microsoft.VisualStudioCode
 ```
@@ -48,7 +48,7 @@ Wrapper check (recommended):
 ```
 
 Expected:
-- Java and javac should be 17.x (18+ may work, but project target is 17)
+- Java and javac should be 25.x (project target is 25)
 - Maven Wrapper should run via `mvnw.cmd`
 
 ## 3. Open FleetWise in VS Code
@@ -114,9 +114,9 @@ Close all terminals and VS Code, then reopen. If still failing, ensure Maven `bi
 
 Ensure `mvnw.cmd` exists in repo root and `.mvn/wrapper` exists. If missing, regenerate from a Spring Initializr project and copy wrapper files.
 
-### Java version not 17
+### Java version not 25
 
-Install JDK 17 and set `JAVA_HOME` to JDK 17 path.
+Install JDK 25 and set `JAVA_HOME` to JDK 25 path.
 
 ### Docker DB connection refused
 
