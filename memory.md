@@ -139,3 +139,24 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Fix**: Switched `year` field schema to validated string input, then converted to number in payload mapping (`toVehiclePayload`).
 - **Avoid**: In typed RHF forms, avoid mixed input/output coercion unless using explicit `useForm` generic input/output signatures.
 - **Date**: 2026-04-11
+
+### [UI] Hook order regression from conditional render placement
+- **Symptom**: New module pages crashed during tests with `Rendered more hooks than during the previous render` and lint flagged `react-hooks/rules-of-hooks`.
+- **Root Cause**: `useMemo` was declared after early loading/error returns, so hook call order changed between renders.
+- **Fix**: Move all hooks (including memoized maps) above conditional returns and memoize directly from stable query references.
+- **Avoid**: Never place hook declarations below any possible return path in React components.
+- **Date**: 2026-04-11
+
+### [TYPE] TanStack Query mutation function test assertions changed
+- **Symptom**: Vitest assertions on mocked mutation functions failed even though UI actions executed correctly.
+- **Root Cause**: TanStack Query mutation functions received a second context argument, so strict `toHaveBeenCalledWith(singleArg)` assertions no longer matched.
+- **Fix**: Assert on the first call first argument (`mock.calls[0][0]`) instead of exact full argument list.
+- **Avoid**: Do not assume mutation functions are invoked with variables only when testing Query v5 hooks.
+- **Date**: 2026-04-11
+
+### [UI] Shared Badge component only supports limited variants
+- **Symptom**: Build failed with TypeScript error when using `variant="destructive"` on `Badge`.
+- **Root Cause**: The local `Badge` implementation exposes only `default`, `secondary`, and `outline` variants.
+- **Fix**: Use supported variant and apply destructive styling via `className` when needed.
+- **Avoid**: Do not introduce unsupported variant names without extending component variant definitions.
+- **Date**: 2026-04-11

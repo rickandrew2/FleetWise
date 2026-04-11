@@ -2,12 +2,26 @@ import axios, { AxiosError } from 'axios'
 import { z } from 'zod'
 import { env } from '@/lib/env'
 import type {
+  AlertQueryFilters,
+  AlertResponse,
+  AlertUnreadCountResponse,
   ApiErrorResponse,
   AuthResponse,
   CostTrendPointResponse,
   DashboardSummaryResponse,
+  DownloadedReport,
+  FuelLogResponse,
+  FuelLogStatsResponse,
+  FuelLogUpsertRequest,
+  GenerateReportRequest,
   LoginRequest,
+  LogQueryFilters,
   MeResponse,
+  ReportJobResponse,
+  ReportType,
+  RouteLogResponse,
+  RouteLogStatsResponse,
+  RouteLogUpsertRequest,
   TopDriverResponse,
   VehicleResponse,
   VehicleUpsertRequest,
@@ -48,6 +62,85 @@ const costTrendPointSchema = z.object({
   totalCost: z.number(),
 })
 
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+
+const fuelLogSchema = z.object({
+  id: z.string().uuid(),
+  vehicleId: z.string().uuid(),
+  driverId: z.string().uuid().nullable(),
+  logDate: isoDateSchema,
+  odometerReadingKm: z.number().nullable(),
+  litersFilled: z.number(),
+  pricePerLiter: z.number(),
+  totalCost: z.number(),
+  stationName: z.string().nullable(),
+  stationLat: z.number().nullable(),
+  stationLng: z.number().nullable(),
+  notes: z.string().nullable(),
+  createdAt: z.string(),
+})
+
+const fuelLogStatsSchema = z.object({
+  totalLogs: z.number().int(),
+  totalCost: z.number().nullable(),
+  averageLitersPerLog: z.number().nullable(),
+})
+
+const routeLogSchema = z.object({
+  id: z.string().uuid(),
+  vehicleId: z.string().uuid(),
+  driverId: z.string().uuid().nullable(),
+  tripDate: isoDateSchema,
+  originLabel: z.string().nullable(),
+  originLat: z.number(),
+  originLng: z.number(),
+  destinationLabel: z.string().nullable(),
+  destinationLat: z.number(),
+  destinationLng: z.number(),
+  distanceKm: z.number().nullable(),
+  estimatedDurationMin: z.number().int().nullable(),
+  actualFuelUsedLiters: z.number().nullable(),
+  expectedFuelLiters: z.number().nullable(),
+  efficiencyScore: z.number().nullable(),
+  createdAt: z.string(),
+})
+
+const routeLogStatsSchema = z.object({
+  totalTrips: z.number().int(),
+  totalDistanceKm: z.number(),
+  averageEfficiencyScore: z.number().nullable(),
+})
+
+const alertTypeSchema = z.enum(['OVERCONSUMPTION', 'HIGH_COST', 'MAINTENANCE_DUE', 'UNUSUAL_FILLUP'])
+
+const alertSchema = z.object({
+  id: z.string().uuid(),
+  vehicleId: z.string().uuid().nullable(),
+  driverId: z.string().uuid().nullable(),
+  alertType: alertTypeSchema,
+  message: z.string(),
+  thresholdValue: z.number().nullable(),
+  actualValue: z.number().nullable(),
+  isRead: z.boolean(),
+  triggeredAt: z.string(),
+})
+
+const alertUnreadCountSchema = z.object({
+  unreadCount: z.number().int().nonnegative(),
+})
+
+const reportTypeSchema = z.enum(['WEEKLY', 'MONTHLY'])
+const reportStatusSchema = z.enum(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'])
+
+const reportJobSchema = z.object({
+  id: z.string().uuid(),
+  reportType: reportTypeSchema,
+  status: reportStatusSchema,
+  filePath: z.string().nullable(),
+  generatedAt: z.string().nullable(),
+  createdAt: z.string(),
+})
+
 const vehicleSchema = z.object({
   id: z.string().uuid(),
   plateNumber: z.string(),
@@ -69,6 +162,82 @@ const apiErrorPayloadSchema = z.object({
   message: z.string().optional(),
   fieldErrors: z.record(z.string(), z.string()).optional(),
 })
+
+function buildLogQueryParams(filters?: LogQueryFilters) {
+  if (!filters) {
+    return undefined
+  }
+
+  const params: Record<string, string> = {}
+  const uuidSchema = z.string().uuid()
+
+  if (filters.vehicleId && uuidSchema.safeParse(filters.vehicleId).success) {
+    params.vehicleId = filters.vehicleId
+  }
+
+  if (filters.driverId && uuidSchema.safeParse(filters.driverId).success) {
+    params.driverId = filters.driverId
+  }
+
+  if (filters.startDate && isoDateSchema.safeParse(filters.startDate).success) {
+    params.startDate = filters.startDate
+  }
+
+  if (filters.endDate && isoDateSchema.safeParse(filters.endDate).success) {
+    params.endDate = filters.endDate
+  }
+
+  if (Object.keys(params).length === 0) {
+    return undefined
+  }
+
+  return params
+}
+
+function buildAlertQueryParams(filters?: AlertQueryFilters) {
+  if (!filters) {
+    return undefined
+  }
+
+  const params: Record<string, string> = {}
+  const uuidSchema = z.string().uuid()
+
+  if (filters.alertType && alertTypeSchema.safeParse(filters.alertType).success) {
+    params.alertType = filters.alertType
+  }
+
+  if (filters.vehicleId && uuidSchema.safeParse(filters.vehicleId).success) {
+    params.vehicleId = filters.vehicleId
+  }
+
+  if (filters.driverId && uuidSchema.safeParse(filters.driverId).success) {
+    params.driverId = filters.driverId
+  }
+
+  if (typeof filters.isRead === 'boolean') {
+    params.isRead = String(filters.isRead)
+  }
+
+  if (Object.keys(params).length === 0) {
+    return undefined
+  }
+
+  return params
+}
+
+function extractFilenameFromHeader(headerValue: string | undefined, fallbackName: string) {
+  if (!headerValue) {
+    return fallbackName
+  }
+
+  const basicMatch = headerValue.match(/filename="?([^";]+)"?/i)
+  if (!basicMatch || !basicMatch[1]) {
+    return fallbackName
+  }
+
+  const sanitized = basicMatch[1].replace(/[^a-zA-Z0-9._-]/g, '_')
+  return sanitized || fallbackName
+}
 
 function parseWithSchema<T>(schema: z.ZodType<T>, payload: unknown, context: string): T {
   const parsed = schema.safeParse(payload)
@@ -177,3 +346,93 @@ export async function updateVehicleRequest(vehicleId: string, payload: VehicleUp
 export async function deleteVehicleRequest(vehicleId: string) {
   await api.delete(`/api/vehicles/${vehicleId}`)
 }
+
+export async function fuelLogsListRequest(filters?: LogQueryFilters) {
+  const { data } = await api.get<FuelLogResponse[]>('/api/fuel-logs', {
+    params: buildLogQueryParams(filters),
+  })
+  return parseWithSchema(z.array(fuelLogSchema), data, 'fuel logs list')
+}
+
+export async function fuelLogStatsRequest(filters?: LogQueryFilters) {
+  const { data } = await api.get<FuelLogStatsResponse>('/api/fuel-logs/stats', {
+    params: buildLogQueryParams(filters),
+  })
+  return parseWithSchema(fuelLogStatsSchema, data, 'fuel logs stats')
+}
+
+export async function createFuelLogRequest(payload: FuelLogUpsertRequest) {
+  const { data } = await api.post<FuelLogResponse>('/api/fuel-logs', payload)
+  return parseWithSchema(fuelLogSchema, data, 'fuel log create response')
+}
+
+export async function deleteFuelLogRequest(fuelLogId: string) {
+  await api.delete(`/api/fuel-logs/${fuelLogId}`)
+}
+
+export async function routesListRequest(filters?: LogQueryFilters) {
+  const { data } = await api.get<RouteLogResponse[]>('/api/routes', {
+    params: buildLogQueryParams(filters),
+  })
+  return parseWithSchema(z.array(routeLogSchema), data, 'routes list')
+}
+
+export async function routeLogStatsRequest(filters?: LogQueryFilters) {
+  const { data } = await api.get<RouteLogStatsResponse>('/api/routes/stats', {
+    params: buildLogQueryParams(filters),
+  })
+  return parseWithSchema(routeLogStatsSchema, data, 'routes stats')
+}
+
+export async function createRouteLogRequest(payload: RouteLogUpsertRequest) {
+  const { data } = await api.post<RouteLogResponse>('/api/routes', payload)
+  return parseWithSchema(routeLogSchema, data, 'route log create response')
+}
+
+export async function deleteRouteLogRequest(routeId: string) {
+  await api.delete(`/api/routes/${routeId}`)
+}
+
+export async function alertsListRequest(filters?: AlertQueryFilters) {
+  const { data } = await api.get<AlertResponse[]>('/api/alerts', {
+    params: buildAlertQueryParams(filters),
+  })
+  return parseWithSchema(z.array(alertSchema), data, 'alerts list')
+}
+
+export async function markAlertAsReadRequest(alertId: string) {
+  const { data } = await api.put<AlertResponse>(`/api/alerts/${alertId}/read`)
+  return parseWithSchema(alertSchema, data, 'alert update response')
+}
+
+export async function alertUnreadCountRequest(driverId?: string) {
+  const params = driverId && z.string().uuid().safeParse(driverId).success ? { driverId } : undefined
+  const { data } = await api.get<AlertUnreadCountResponse>('/api/alerts/unread-count', { params })
+  return parseWithSchema(alertUnreadCountSchema, data, 'alert unread count')
+}
+
+export async function reportsListRequest() {
+  const { data } = await api.get<ReportJobResponse[]>('/api/reports')
+  return parseWithSchema(z.array(reportJobSchema), data, 'reports list')
+}
+
+export async function generateReportRequest(payload: GenerateReportRequest) {
+  const safePayload = {
+    reportType: parseWithSchema(reportTypeSchema, payload.reportType, 'report type'),
+  }
+  const { data } = await api.post<ReportJobResponse>('/api/reports/generate', safePayload)
+  return parseWithSchema(reportJobSchema, data, 'report generate response')
+}
+
+export async function downloadReportRequest(reportId: string): Promise<DownloadedReport> {
+  const response = await api.get<Blob>(`/api/reports/${reportId}/download`, {
+    responseType: 'blob',
+  })
+  const filename = extractFilenameFromHeader(response.headers['content-disposition'], `report-${reportId}.bin`)
+  return {
+    blob: response.data,
+    filename,
+  }
+}
+
+export const REPORT_TYPES: ReportType[] = ['WEEKLY', 'MONTHLY']
