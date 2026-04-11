@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "concurrently -n DB,API,WEB -c yellow,cyan,magenta \"npm run dev:db\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:seeded": "concurrently -n DB,API,WEB -c yellow,cyan,magenta \"npm run dev:db\" \"npm run dev:backend:seeded\" \"npm run dev:frontend\"",
     "down": "docker compose down",
     "dev:db": "docker compose up -d postgres",
     "dev:backend": "mvnw.cmd spring-boot:run",
+    "dev:backend:seeded": "mvnw.cmd -Dspring-boot.run.profiles=dev spring-boot:run",
     "dev:frontend": "npm --prefix fleetwise-web run dev",
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "mvnw.cmd test",

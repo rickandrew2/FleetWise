@@ -30,7 +30,7 @@ public interface RouteLogRepository extends JpaRepository<RouteLog, UUID> {
                         select r from RouteLog r
                         where (:driverId is null or r.driverId = :driverId)
                           and r.efficiencyScore is not null
-                        order by r.efficiencyScore asc, r.createdAt desc
+                        order by r.efficiencyScore desc, r.createdAt desc
                         """)
         List<RouteLog> findTopInefficient(
                         @Param("driverId") UUID driverId,

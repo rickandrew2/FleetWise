@@ -3,6 +3,7 @@ package com.fleetwise.vehicle;
 import com.fleetwise.vehicle.dto.EpaLookupRequest;
 import com.fleetwise.vehicle.dto.EpaVehicleOption;
 import com.fleetwise.vehicle.dto.VehicleResponse;
+import com.fleetwise.vehicle.dto.VehicleStatsResponse;
 import com.fleetwise.vehicle.dto.VehicleUpsertRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +46,12 @@ public class VehicleController {
     @PreAuthorize("hasAnyRole('ADMIN','FLEET_MANAGER')")
     public VehicleResponse getVehicleById(@PathVariable UUID id) {
         return vehicleService.getVehicleById(id);
+    }
+
+    @GetMapping("/{id}/stats")
+    @PreAuthorize("hasAnyRole('ADMIN','FLEET_MANAGER')")
+    public VehicleStatsResponse getVehicleStats(@PathVariable UUID id) {
+        return vehicleService.getVehicleStats(id);
     }
 
     @PutMapping("/{id}")

@@ -8,6 +8,7 @@ import {
   dashboardTopDriversRequest,
   parseApiError,
 } from '@/lib/api'
+import { formatPhpCurrency } from '@/lib/currency'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
@@ -83,7 +84,7 @@ export function DashboardPage() {
           <CardHeader className="pb-2">
             <CardDescription>Month-to-Date Fuel Cost</CardDescription>
             <CardTitle className="text-3xl">
-              ${summary?.monthToDateFuelCost?.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {formatPhpCurrency(summary?.monthToDateFuelCost)}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -144,9 +145,9 @@ export function DashboardPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
                   <XAxis dataKey="label" tickMargin={8} />
-                  <YAxis tickFormatter={(value) => `$${value}`} width={60} />
+                  <YAxis tickFormatter={(value) => formatPhpCurrency(Number(value))} width={90} />
                   <Tooltip
-                    formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, 'Total Cost']}
+                    formatter={(value) => [formatPhpCurrency(Number(value ?? 0)), 'Total Cost']}
                     labelFormatter={(label) => `Period: ${label}`}
                   />
                   <Area

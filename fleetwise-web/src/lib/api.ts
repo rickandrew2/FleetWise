@@ -10,6 +10,8 @@ import type {
   CostTrendPointResponse,
   DashboardSummaryResponse,
   DownloadedReport,
+  EpaLookupRequest,
+  EpaVehicleOptionResponse,
   FuelLogResponse,
   FuelLogStatsResponse,
   FuelLogUpsertRequest,
@@ -23,6 +25,7 @@ import type {
   RouteLogStatsResponse,
   RouteLogUpsertRequest,
   TopDriverResponse,
+  UserSummaryResponse,
   VehicleResponse,
   VehicleUpsertRequest,
 } from '@/types/api'
@@ -42,6 +45,26 @@ const meResponseSchema = z.object({
   email: z.string().email(),
   role: z.enum(['ADMIN', 'FLEET_MANAGER', 'DRIVER']),
   userId: z.string().uuid(),
+})
+
+const userSummarySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().nullable(),
+  email: z.string().email(),
+  role: z.enum(['ADMIN', 'FLEET_MANAGER', 'DRIVER']),
+})
+
+const epaLookupRequestSchema = z.object({
+  year: z.number().int().min(1980).max(2100),
+  make: z.string().min(1).max(50),
+  model: z.string().min(1).max(50),
+})
+
+const epaVehicleOptionSchema = z.object({
+  epaVehicleId: z.number().int().positive(),
+  label: z.string(),
+  combinedMpg: z.number().nullable(),
+  fuelType: z.string().nullable(),
 })
 
 const dashboardSummarySchema = z.object({
@@ -331,6 +354,17 @@ export async function dashboardCostTrendRequest() {
 export async function vehiclesListRequest() {
   const { data } = await api.get<VehicleResponse[]>('/api/vehicles')
   return parseWithSchema(z.array(vehicleSchema), data, 'vehicles list')
+}
+
+export async function usersListRequest() {
+  const { data } = await api.get<UserSummaryResponse[]>('/api/users')
+  return parseWithSchema(z.array(userSummarySchema), data, 'users list')
+}
+
+export async function lookupEpaVehiclesRequest(payload: EpaLookupRequest) {
+  const safePayload = parseWithSchema(epaLookupRequestSchema, payload, 'EPA lookup payload')
+  const { data } = await api.post<EpaVehicleOptionResponse[]>('/api/vehicles/lookup-epa', safePayload)
+  return parseWithSchema(z.array(epaVehicleOptionSchema), data, 'EPA lookup options')
 }
 
 export async function createVehicleRequest(payload: VehicleUpsertRequest) {

@@ -160,3 +160,24 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Fix**: Use supported variant and apply destructive styling via `className` when needed.
 - **Avoid**: Do not introduce unsupported variant names without extending component variant definitions.
 - **Date**: 2026-04-11
+
+### [UI] Form label collisions broke RTL selectors
+- **Symptom**: Frontend tests failed with "Found multiple elements with the text of: Vehicle" after adding new filter dropdowns.
+- **Root Cause**: Both filter controls and create-form fields used the same label text, making broad `getByLabelText('Vehicle')` selectors ambiguous.
+- **Fix**: Scope selectors to the intended element (for example `getByLabelText('Vehicle', { selector: 'select#vehicleId' })`) in form submission tests.
+- **Avoid**: Do not rely on unscoped label queries when pages contain repeated labels across filters and forms.
+- **Date**: 2026-04-11
+
+### [BUILD] Dev seeder crashed due negative list index
+- **Symptom**: Spring context startup failed with `ArrayIndexOutOfBoundsException: Index -3 out of bounds for length 5` in `DevDataLoader.seedFuelLogs`.
+- **Root Cause**: Station index used `%` with a negative `plate.hashCode()`, producing a negative result for list indexing.
+- **Fix**: Replaced modulo indexing with `Math.floorMod(i + plate.hashCode(), stations.size())` before reading the station list.
+- **Avoid**: Do not use raw `%` for collection indexes when the left operand can be negative.
+- **Date**: 2026-04-11
+
+### [UI] Optional directory lookups should not block core pages
+- **Symptom**: Fuel Logs, Routes, and Alerts rendered full-page errors when `/api/users` returned 404, even though core page data endpoints were available.
+- **Root Cause**: Pages treated the users lookup as a required query and included it in blocking error state.
+- **Fix**: Made users lookup non-blocking, kept core queries as gatekeepers, and added a small helper message/fallback driver option when user directory fetch fails.
+- **Avoid**: Do not fail entire page renders for secondary enrichment/filter queries.
+- **Date**: 2026-04-11

@@ -105,6 +105,13 @@ class VehicleControllerIntegrationTest {
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.make").value("Toyota"));
 
+                mockMvc.perform(get("/api/vehicles/" + vehicleId + "/stats")
+                                .header("Authorization", "Bearer " + managerToken))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.vehicleId").value(vehicleId))
+                                .andExpect(jsonPath("$.totalFuelLogs").value(0))
+                                .andExpect(jsonPath("$.totalTrips").value(0));
+
                 String updatePayload = """
                                 {
                                   "plateNumber": "abc-123",

@@ -1,9 +1,14 @@
 package com.fleetwise.vehicle;
 
+import com.fleetwise.fuellog.FuelLog;
+import com.fleetwise.fuellog.FuelLogRepository;
+import com.fleetwise.route.RouteLog;
+import com.fleetwise.route.RouteLogRepository;
 import com.fleetwise.vehicle.dto.EpaLookupRequest;
 import com.fleetwise.vehicle.dto.EpaVehicleOption;
 import com.fleetwise.vehicle.dto.FuelEconomyVehicleData;
 import com.fleetwise.vehicle.dto.VehicleResponse;
+import com.fleetwise.vehicle.dto.VehicleStatsResponse;
 import com.fleetwise.vehicle.dto.VehicleUpsertRequest;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +26,8 @@ public class VehicleService {
 
     private final VehicleRepository vehicleRepository;
     private final FuelEconomyApiClient fuelEconomyApiClient;
+    private final FuelLogRepository fuelLogRepository;
+    private final RouteLogRepository routeLogRepository;
 
     @Transactional(readOnly = true)
     public List<VehicleResponse> getAllVehicles() {
@@ -32,6 +39,55 @@ public class VehicleService {
         Vehicle vehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Vehicle not found"));
         return toResponse(vehicle);
+    }
+
+    @Transactional(readOnly = true)
+    public VehicleStatsResponse getVehicleStats(UUID id) {
+        if (!vehicleRepository.existsById(id)) {
+            throw new EntityNotFoundException("Vehicle not found");
+        }
+
+        List<FuelLog> fuelLogs = fuelLogRepository.findFiltered(id, null, null, null);
+        List<RouteLog> routeLogs = routeLogRepository.findFiltered(id, null, null, null);
+
+        BigDecimal totalFuelLiters = fuelLogs.stream()
+                .map(FuelLog::getLitersFilled)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal totalFuelCost = fuelLogs.stream()
+                .map(FuelLog::getTotalCost)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal totalDistanceKm = routeLogs.stream()
+                .map(RouteLog::getDistanceKm)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        List<BigDecimal> efficiencyScores = routeLogs.stream()
+                .map(RouteLog::getEfficiencyScore)
+                .filter(value -> value != null)
+                .toList();
+
+        Double averageEfficiencyScore = null;
+        if (!efficiencyScores.isEmpty()) {
+            BigDecimal sum = efficiencyScores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+            averageEfficiencyScore = sum.divide(BigDecimal.valueOf(efficiencyScores.size()), 2, RoundingMode.HALF_UP)
+                    .doubleValue();
+        }
+
+        return new VehicleStatsResponse(
+                id,
+                fuelLogs.size(),
+                totalFuelLiters.doubleValue(),
+                totalFuelCost.doubleValue(),
+                routeLogs.size(),
+                totalDistanceKm.doubleValue(),
+                averageEfficiencyScore);
     }
 
     @Transactional

@@ -19,6 +19,13 @@ export interface MeResponse {
   userId: string
 }
 
+export interface UserSummaryResponse {
+  id: string
+  name: string | null
+  email: string
+  role: UserRole
+}
+
 export interface ApiErrorResponse {
   status?: number
   message?: string
@@ -68,6 +75,19 @@ export interface VehicleUpsertRequest {
   tankCapacityLiters?: number | null
   epaVehicleId?: number | null
   assignedDriverId?: string | null
+}
+
+export interface EpaLookupRequest {
+  year: number
+  make: string
+  model: string
+}
+
+export interface EpaVehicleOptionResponse {
+  epaVehicleId: number
+  label: string
+  combinedMpg: number | null
+  fuelType: string | null
 }
 
 export interface LogQueryFilters {

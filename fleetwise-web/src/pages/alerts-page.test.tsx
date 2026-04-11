@@ -8,6 +8,7 @@ import {
   alertsListRequest,
   markAlertAsReadRequest,
   parseApiError,
+  usersListRequest,
   vehiclesListRequest,
 } from '@/lib/api'
 import { useAuth } from '@/providers/auth-provider'
@@ -31,6 +32,7 @@ vi.mock('@/lib/api', async () => {
     alertUnreadCountRequest: vi.fn(),
     markAlertAsReadRequest: vi.fn(),
     parseApiError: vi.fn(),
+    usersListRequest: vi.fn(),
   }
 })
 
@@ -40,6 +42,7 @@ const mockedAlertsList = vi.mocked(alertsListRequest)
 const mockedUnreadCount = vi.mocked(alertUnreadCountRequest)
 const mockedMarkRead = vi.mocked(markAlertAsReadRequest)
 const mockedParseApiError = vi.mocked(parseApiError)
+const mockedUsersList = vi.mocked(usersListRequest)
 
 function renderWithClient() {
   const queryClient = new QueryClient({
@@ -107,6 +110,14 @@ describe('AlertsPage', () => {
     ])
 
     mockedUnreadCount.mockResolvedValue({ unreadCount: 1 })
+    mockedUsersList.mockResolvedValue([
+      {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        name: 'Manager User',
+        email: 'manager@fleetwise.test',
+        role: 'FLEET_MANAGER',
+      },
+    ])
     mockedMarkRead.mockResolvedValue({
       id: '550e8400-e29b-41d4-a716-446655440010',
       vehicleId: '550e8400-e29b-41d4-a716-446655440001',

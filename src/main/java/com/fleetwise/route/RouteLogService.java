@@ -14,6 +14,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -63,6 +64,18 @@ public class RouteLogService {
         }
 
         return toResponse(routeLog);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RouteLogResponse> getTopInefficientRoutes(String currentEmail, UUID driverId, Integer limit) {
+        User currentUser = getCurrentUser(currentEmail);
+        UUID effectiveDriverId = resolveDriverFilter(currentUser, driverId);
+        int safeLimit = sanitizeLimit(limit);
+
+        return routeLogRepository.findTopInefficient(effectiveDriverId, PageRequest.of(0, safeLimit))
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional
@@ -257,5 +270,12 @@ public class RouteLogService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private int sanitizeLimit(Integer limit) {
+        if (limit == null) {
+            return 10;
+        }
+        return Math.min(Math.max(limit, 1), 50);
     }
 }

@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# FleetWise Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+FleetWise Web is the React frontend for FleetWise, focused on day-to-day fleet operations visibility for fuel costs, route efficiency, alerts, and reporting.
 
-Currently, two official plugins are available:
+## Product Context
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+For the plain-language business explanation of FleetWise, read [../PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) first.
 
-## React Compiler
+For full repository architecture and backend contracts, use [../FleetWise_README.md](../FleetWise_README.md).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+- React 19 + TypeScript
+- Vite 8
+- React Router 6
+- TanStack Query 5
+- Axios + Zod response validation
+- Tailwind CSS
+- Vitest + Testing Library
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Available Scripts
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Run from this directory:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- `npm run dev` starts the Vite dev server
+- `npm run build` runs TypeScript build and creates a production bundle
+- `npm run lint` runs ESLint
+- `npm run test` starts Vitest in watch mode
+- `npm run test:run` runs Vitest once
+- `npm run preview` serves the built app locally
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Environment
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- `VITE_API_BASE_URL` optional
+  - Defaults to `http://localhost:8080` when not set or invalid
+  - Only the URL origin is used by the app
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Current App Scope
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Implemented routes:
+
+- `/login`
+- `/dashboard`
+- `/vehicles`
+- `/fuel-logs`
+- `/routes`
+- `/alerts`
+- `/reports`
+
+Role-gated pages:
+
+- Dashboard: `ADMIN`, `FLEET_MANAGER`, `DRIVER`
+- Vehicles: `ADMIN`, `FLEET_MANAGER`
+- Fuel Logs: `ADMIN`, `FLEET_MANAGER`, `DRIVER`
+- Routes: `ADMIN`, `FLEET_MANAGER`, `DRIVER`
+- Alerts: `ADMIN`, `FLEET_MANAGER`, `DRIVER`
+- Reports: `ADMIN`, `FLEET_MANAGER`
+
+## Running from Repository Root
+
+Use the root scripts to run all services together:
+
+- `npm run dev` starts Postgres, Spring Boot API, and this frontend
+- `npm run down` stops Docker infrastructure services

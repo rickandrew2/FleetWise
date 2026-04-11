@@ -9,6 +9,7 @@ import {
   parseApiError,
   routeLogStatsRequest,
   routesListRequest,
+  usersListRequest,
   vehiclesListRequest,
 } from '@/lib/api'
 import { useAuth } from '@/providers/auth-provider'
@@ -33,6 +34,7 @@ vi.mock('@/lib/api', async () => {
     createRouteLogRequest: vi.fn(),
     deleteRouteLogRequest: vi.fn(),
     parseApiError: vi.fn(),
+    usersListRequest: vi.fn(),
   }
 })
 
@@ -43,6 +45,7 @@ const mockedRouteStats = vi.mocked(routeLogStatsRequest)
 const mockedCreateRoute = vi.mocked(createRouteLogRequest)
 const mockedDeleteRoute = vi.mocked(deleteRouteLogRequest)
 const mockedParseApiError = vi.mocked(parseApiError)
+const mockedUsersList = vi.mocked(usersListRequest)
 
 function renderWithClient() {
   const queryClient = new QueryClient({
@@ -95,6 +98,14 @@ describe('RoutesPage', () => {
       },
     ])
     mockedRoutesList.mockResolvedValue([])
+    mockedUsersList.mockResolvedValue([
+      {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        name: 'Admin User',
+        email: 'admin@fleetwise.test',
+        role: 'ADMIN',
+      },
+    ])
     mockedRouteStats.mockResolvedValue({
       totalTrips: 0,
       totalDistanceKm: 0,
@@ -126,7 +137,7 @@ describe('RoutesPage', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Add Route' }))
-    await user.selectOptions(screen.getByLabelText('Vehicle'), '550e8400-e29b-41d4-a716-446655440001')
+    await user.selectOptions(screen.getByLabelText('Vehicle', { selector: 'select#vehicleId' }), '550e8400-e29b-41d4-a716-446655440001')
     await user.clear(screen.getByLabelText('Origin Latitude'))
     await user.type(screen.getByLabelText('Origin Latitude'), '37.77')
     await user.clear(screen.getByLabelText('Origin Longitude'))

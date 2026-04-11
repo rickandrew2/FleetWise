@@ -10,6 +10,7 @@ import {
   parseApiError,
   routeLogStatsRequest,
   routesListRequest,
+  usersListRequest,
   vehiclesListRequest,
 } from '@/lib/api'
 import { notifyApiError, notifyError, notifySuccess } from '@/lib/notify'
@@ -19,19 +20,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
-import type { LogQueryFilters, RouteLogResponse, RouteLogUpsertRequest } from '@/types/api'
+import type { LogQueryFilters, RouteLogResponse, RouteLogUpsertRequest, UserSummaryResponse } from '@/types/api'
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-const uuidSchema = z.string().uuid()
 
 const routeLogFormSchema = z.object({
   vehicleId: z.string().uuid('Vehicle is required'),
-  driverId: z
-    .string()
-    .optional()
-    .refine((value) => !value || uuidSchema.safeParse(value).success, {
-      message: 'Driver ID must be a valid UUID',
-    }),
   tripDate: z.string().regex(dateRegex, 'Trip date is required'),
   originLabel: z.string().max(150, 'Origin label is too long').optional(),
   originLat: z
@@ -67,7 +61,6 @@ type RouteLogFormValues = z.infer<typeof routeLogFormSchema>
 
 const initialRouteFormValues: RouteLogFormValues = {
   vehicleId: '',
-  driverId: '',
   tripDate: new Date().toISOString().slice(0, 10),
   originLabel: '',
   originLat: '',
@@ -88,7 +81,6 @@ const initialFilters: LogQueryFilters = {
 function toRoutePayload(values: RouteLogFormValues): RouteLogUpsertRequest {
   return {
     vehicleId: values.vehicleId,
-    driverId: values.driverId?.trim() || null,
     tripDate: values.tripDate,
     originLabel: values.originLabel?.trim() || null,
     originLat: Number(values.originLat),
@@ -125,6 +117,16 @@ export function RoutesPage() {
     queryKey: ['vehicles'],
     queryFn: vehiclesListRequest,
   })
+
+  const canBrowseUsers = user?.role === 'ADMIN' || user?.role === 'FLEET_MANAGER'
+
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: usersListRequest,
+    enabled: canBrowseUsers,
+  })
+
+  const usersLookupError = canBrowseUsers ? usersQuery.error : null
 
   const routesQuery = useQuery({
     queryKey: ['routes', appliedFilters],
@@ -184,7 +186,7 @@ export function RoutesPage() {
     return new Map(data.map((vehicle) => [vehicle.id, `${vehicle.plateNumber} • ${vehicle.make} ${vehicle.model}`]))
   }, [vehiclesQuery.data])
 
-  const isLoading = vehiclesQuery.isLoading || routesQuery.isLoading || routeStatsQuery.isLoading
+  const isLoading = vehiclesQuery.isLoading || routesQuery.isLoading || routeStatsQuery.isLoading || (canBrowseUsers && usersQuery.isLoading)
 
   if (isLoading) {
     return <PageLoadingState />
@@ -206,7 +208,20 @@ export function RoutesPage() {
     )
   }
 
+  const usersLookupErrorMessage = usersLookupError
+    ? parseApiError(usersLookupError).message || 'Unable to load driver list for filtering.'
+    : null
+
   const vehicles = vehiclesQuery.data ?? []
+  const availableDrivers: UserSummaryResponse[] = canBrowseUsers
+    ? (usersQuery.data && usersQuery.data.length > 0
+      ? usersQuery.data
+      : user
+        ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+        : [])
+    : user
+      ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+      : []
   const routes = routesQuery.data || []
   const stats = routeStatsQuery.data
   const canDelete = user?.role === 'ADMIN'
@@ -229,16 +244,6 @@ export function RoutesPage() {
   }
 
   function applyFilters() {
-    if (draftFilters.vehicleId && !uuidSchema.safeParse(draftFilters.vehicleId).success) {
-      notifyError('Vehicle ID filter must be a valid UUID.')
-      return
-    }
-
-    if (draftFilters.driverId && !uuidSchema.safeParse(draftFilters.driverId).success) {
-      notifyError('Driver ID filter must be a valid UUID.')
-      return
-    }
-
     if (draftFilters.startDate && !dateRegex.test(draftFilters.startDate)) {
       notifyError('Start date must be in YYYY-MM-DD format.')
       return
@@ -263,7 +268,10 @@ export function RoutesPage() {
   }
 
   const onSubmit = handleSubmit(async (values) => {
-    const payload = toRoutePayload(values)
+    const payload = {
+      ...toRoutePayload(values),
+      driverId: user?.userId ?? null,
+    }
     await createMutation.mutateAsync(payload)
   })
 
@@ -309,23 +317,40 @@ export function RoutesPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
-            <Label htmlFor="route-filter-vehicle-id">Vehicle ID</Label>
-            <Input
+            <Label htmlFor="route-filter-vehicle-id">Vehicle</Label>
+            <select
               id="route-filter-vehicle-id"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={draftFilters.vehicleId || ''}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, vehicleId: event.target.value.trim() }))}
-              placeholder="Optional UUID"
-            />
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, vehicleId: event.target.value }))}
+            >
+              <option value="">All vehicles</option>
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>
+                  {vehicle.plateNumber} • {vehicle.make} {vehicle.model}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="route-filter-driver-id">Driver ID</Label>
-            <Input
+            <Label htmlFor="route-filter-driver-id">Driver</Label>
+            <select
               id="route-filter-driver-id"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={draftFilters.driverId || ''}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, driverId: event.target.value.trim() }))}
-              placeholder="Optional UUID"
-            />
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, driverId: event.target.value }))}
+            >
+              <option value="">All drivers</option>
+              {availableDrivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {(driver.name || 'Unknown')} • {driver.email}
+                </option>
+              ))}
+            </select>
+            {usersLookupErrorMessage ? (
+              <p className="text-xs text-muted-foreground">Driver directory is temporarily unavailable: {usersLookupErrorMessage}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -508,9 +533,8 @@ export function RoutesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="driverId">Driver ID</Label>
-                <Input id="driverId" autoComplete="off" placeholder="Optional UUID" {...register('driverId')} />
-                {errors.driverId ? <p className="text-sm text-destructive">{errors.driverId.message}</p> : null}
+                <Label>Driver</Label>
+                <Input value={user?.email || 'Unknown user'} readOnly disabled />
               </div>
 
               <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-2">

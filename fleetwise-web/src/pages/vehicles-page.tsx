@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Search, Save, X } from 'lucide-react'
+import { CheckCircle2, Plus, Pencil, Trash2, Search, Save, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import {
   createVehicleRequest,
   deleteVehicleRequest,
+  lookupEpaVehiclesRequest,
   parseApiError,
   updateVehicleRequest,
   vehiclesListRequest,
@@ -19,7 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
-import type { VehicleResponse, VehicleUpsertRequest } from '@/types/api'
+import type { EpaVehicleOptionResponse, VehicleResponse, VehicleUpsertRequest } from '@/types/api'
 
 const vehicleFormSchema = z.object({
   plateNumber: z.string().min(1, 'Plate number is required').max(20, 'Plate number is too long'),
@@ -90,6 +91,8 @@ export function VehiclesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [editingVehicle, setEditingVehicle] = useState<VehicleResponse | null>(null)
   const [formVisible, setFormVisible] = useState(false)
+  const [epaOptions, setEpaOptions] = useState<EpaVehicleOptionResponse[]>([])
+  const [selectedEpaOption, setSelectedEpaOption] = useState<EpaVehicleOptionResponse | null>(null)
 
   const vehiclesQuery = useQuery({
     queryKey: ['vehicles'],
@@ -101,6 +104,8 @@ export function VehiclesPage() {
     handleSubmit,
     reset,
     setError,
+    setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<VehicleFormValues>({
     resolver: zodResolver(vehicleFormSchema),
@@ -118,6 +123,19 @@ export function VehiclesPage() {
       const parsed = parseApiError(error)
       mapFieldErrors(parsed.fieldErrors)
       notifyApiError(parsed, 'Failed to create vehicle.')
+    },
+  })
+
+  const epaLookupMutation = useMutation({
+    mutationFn: lookupEpaVehiclesRequest,
+    onSuccess: (options) => {
+      setEpaOptions(options)
+      setSelectedEpaOption(null)
+      setValue('epaVehicleId', '')
+    },
+    onError: (error) => {
+      const parsed = parseApiError(error)
+      notifyApiError(parsed, 'Unable to load FuelEconomy.gov options.')
     },
   })
 
@@ -151,19 +169,67 @@ export function VehiclesPage() {
   function closeForm() {
     setFormVisible(false)
     setEditingVehicle(null)
+    setEpaOptions([])
+    setSelectedEpaOption(null)
     reset(initialVehicleFormValues)
   }
 
   function openCreateForm() {
     setEditingVehicle(null)
+    setEpaOptions([])
+    setSelectedEpaOption(null)
     reset(initialVehicleFormValues)
     setFormVisible(true)
   }
 
   function openEditForm(vehicle: VehicleResponse) {
     setEditingVehicle(vehicle)
+    setEpaOptions([])
+    setSelectedEpaOption(
+      vehicle.epaVehicleId
+        ? {
+            epaVehicleId: vehicle.epaVehicleId,
+            label: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+            combinedMpg: vehicle.combinedMpg,
+            fuelType: vehicle.fuelType,
+          }
+        : null,
+    )
     reset(toFormValues(vehicle))
     setFormVisible(true)
+  }
+
+  async function lookupEpaOptions() {
+    const make = getValues('make').trim()
+    const model = getValues('model').trim()
+    const yearRaw = getValues('year').trim()
+    const year = Number(yearRaw)
+
+    if (!make) {
+      setError('make', { message: 'Make is required before lookup' })
+      return
+    }
+
+    if (!model) {
+      setError('model', { message: 'Model is required before lookup' })
+      return
+    }
+
+    if (Number.isNaN(year) || year < 1980 || year > 2100) {
+      setError('year', { message: 'Enter a valid year before lookup' })
+      return
+    }
+
+    await epaLookupMutation.mutateAsync({ make, model, year })
+  }
+
+  function selectEpaOption(option: EpaVehicleOptionResponse) {
+    setSelectedEpaOption(option)
+    setValue('epaVehicleId', String(option.epaVehicleId))
+    if (option.fuelType) {
+      setValue('fuelType', option.fuelType)
+    }
+    setEpaOptions([])
   }
 
   function mapFieldErrors(fieldErrors?: Record<string, string>) {
@@ -360,6 +426,56 @@ export function VehiclesPage() {
                 {errors.model ? <p className="text-sm text-destructive">{errors.model.message}</p> : null}
               </div>
 
+              <div className="space-y-2 sm:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>EPA Data</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      void lookupEpaOptions()
+                    }}
+                    disabled={epaLookupMutation.isPending}
+                  >
+                    + Lookup from FuelEconomy.gov
+                  </Button>
+                </div>
+
+                <input type="hidden" {...register('epaVehicleId')} />
+
+                {epaLookupMutation.isPending ? (
+                  <p className="text-sm text-muted-foreground">Looking up EPA options...</p>
+                ) : null}
+
+                {epaOptions.length > 0 ? (
+                  <div className="max-h-44 overflow-auto rounded-md border border-border/80">
+                    <ul className="divide-y divide-border/70 text-sm">
+                      {epaOptions.map((option) => (
+                        <li key={option.epaVehicleId}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-secondary/40"
+                            onClick={() => selectEpaOption(option)}
+                          >
+                            <span>{option.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {option.combinedMpg != null ? `Combined MPG: ${option.combinedMpg.toFixed(1)}` : 'MPG unavailable'}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {selectedEpaOption ? (
+                  <p className="flex items-center gap-2 text-sm text-emerald-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                    EPA data loaded - Combined MPG: {selectedEpaOption.combinedMpg != null ? selectedEpaOption.combinedMpg.toFixed(1) : 'N/A'}
+                  </p>
+                ) : null}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="fuelType">Fuel Type</Label>
                 <Input id="fuelType" autoComplete="off" {...register('fuelType')} />
@@ -370,12 +486,6 @@ export function VehiclesPage() {
                 <Label htmlFor="tankCapacityLiters">Tank Capacity (L)</Label>
                 <Input id="tankCapacityLiters" type="number" inputMode="decimal" step="0.1" {...register('tankCapacityLiters')} />
                 {errors.tankCapacityLiters ? <p className="text-sm text-destructive">{errors.tankCapacityLiters.message}</p> : null}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="epaVehicleId">EPA Vehicle ID</Label>
-                <Input id="epaVehicleId" type="number" inputMode="numeric" {...register('epaVehicleId')} />
-                {errors.epaVehicleId ? <p className="text-sm text-destructive">{errors.epaVehicleId.message}</p> : null}
               </div>
 
               <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-2">

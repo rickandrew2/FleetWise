@@ -10,8 +10,10 @@ import {
   fuelLogsListRequest,
   fuelLogStatsRequest,
   parseApiError,
+  usersListRequest,
   vehiclesListRequest,
 } from '@/lib/api'
+import { formatPhpCurrency } from '@/lib/currency'
 import { notifyApiError, notifyError, notifySuccess } from '@/lib/notify'
 import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
@@ -19,19 +21,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
-import type { FuelLogResponse, FuelLogUpsertRequest, LogQueryFilters } from '@/types/api'
+import type { FuelLogResponse, FuelLogUpsertRequest, LogQueryFilters, UserSummaryResponse } from '@/types/api'
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-const uuidSchema = z.string().uuid()
 
 const fuelLogFormSchema = z.object({
   vehicleId: z.string().uuid('Vehicle is required'),
-  driverId: z
-    .string()
-    .optional()
-    .refine((value) => !value || uuidSchema.safeParse(value).success, {
-      message: 'Driver ID must be a valid UUID',
-    }),
   logDate: z.string().regex(dateRegex, 'Log date is required'),
   odometerReadingKm: z
     .string()
@@ -65,7 +60,6 @@ type FuelLogFormValues = z.infer<typeof fuelLogFormSchema>
 
 const initialFuelLogFormValues: FuelLogFormValues = {
   vehicleId: '',
-  driverId: '',
   logDate: new Date().toISOString().slice(0, 10),
   odometerReadingKm: '',
   litersFilled: '',
@@ -83,16 +77,9 @@ const initialFilters: LogQueryFilters = {
   endDate: '',
 }
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 2,
-})
-
 function toFuelLogPayload(values: FuelLogFormValues): FuelLogUpsertRequest {
   return {
     vehicleId: values.vehicleId,
-    driverId: values.driverId?.trim() || null,
     logDate: values.logDate,
     odometerReadingKm: values.odometerReadingKm ? Number(values.odometerReadingKm) : null,
     litersFilled: Number(values.litersFilled),
@@ -129,6 +116,16 @@ export function FuelLogsPage() {
     queryKey: ['vehicles'],
     queryFn: vehiclesListRequest,
   })
+
+  const canBrowseUsers = user?.role === 'ADMIN' || user?.role === 'FLEET_MANAGER'
+
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: usersListRequest,
+    enabled: canBrowseUsers,
+  })
+
+  const usersLookupError = canBrowseUsers ? usersQuery.error : null
 
   const fuelLogsQuery = useQuery({
     queryKey: ['fuelLogs', appliedFilters],
@@ -188,7 +185,7 @@ export function FuelLogsPage() {
     return new Map(data.map((vehicle) => [vehicle.id, `${vehicle.plateNumber} • ${vehicle.make} ${vehicle.model}`]))
   }, [vehiclesQuery.data])
 
-  const isLoading = vehiclesQuery.isLoading || fuelLogsQuery.isLoading || fuelLogStatsQuery.isLoading
+  const isLoading = vehiclesQuery.isLoading || fuelLogsQuery.isLoading || fuelLogStatsQuery.isLoading || (canBrowseUsers && usersQuery.isLoading)
 
   if (isLoading) {
     return <PageLoadingState />
@@ -210,7 +207,20 @@ export function FuelLogsPage() {
     )
   }
 
+  const usersLookupErrorMessage = usersLookupError
+    ? parseApiError(usersLookupError).message || 'Unable to load driver list for filtering.'
+    : null
+
   const vehicles = vehiclesQuery.data ?? []
+  const availableDrivers: UserSummaryResponse[] = canBrowseUsers
+    ? (usersQuery.data && usersQuery.data.length > 0
+      ? usersQuery.data
+      : user
+        ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+        : [])
+    : user
+      ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+      : []
   const fuelLogs = fuelLogsQuery.data || []
   const stats = fuelLogStatsQuery.data
   const canDelete = user?.role === 'ADMIN'
@@ -233,16 +243,6 @@ export function FuelLogsPage() {
   }
 
   function applyFilters() {
-    if (draftFilters.vehicleId && !uuidSchema.safeParse(draftFilters.vehicleId).success) {
-      notifyError('Vehicle ID filter must be a valid UUID.')
-      return
-    }
-
-    if (draftFilters.driverId && !uuidSchema.safeParse(draftFilters.driverId).success) {
-      notifyError('Driver ID filter must be a valid UUID.')
-      return
-    }
-
     if (draftFilters.startDate && !dateRegex.test(draftFilters.startDate)) {
       notifyError('Start date must be in YYYY-MM-DD format.')
       return
@@ -267,7 +267,10 @@ export function FuelLogsPage() {
   }
 
   const onSubmit = handleSubmit(async (values) => {
-    const payload = toFuelLogPayload(values)
+    const payload = {
+      ...toFuelLogPayload(values),
+      driverId: user?.userId ?? null,
+    }
     await createMutation.mutateAsync(payload)
   })
 
@@ -295,7 +298,7 @@ export function FuelLogsPage() {
         <Card>
           <CardHeader>
             <CardDescription>Total Cost</CardDescription>
-            <CardTitle>{currencyFormatter.format(stats?.totalCost ?? 0)}</CardTitle>
+            <CardTitle>{formatPhpCurrency(stats?.totalCost ?? 0)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -313,23 +316,40 @@ export function FuelLogsPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
-            <Label htmlFor="fuel-filter-vehicle-id">Vehicle ID</Label>
-            <Input
+            <Label htmlFor="fuel-filter-vehicle-id">Vehicle</Label>
+            <select
               id="fuel-filter-vehicle-id"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={draftFilters.vehicleId || ''}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, vehicleId: event.target.value.trim() }))}
-              placeholder="Optional UUID"
-            />
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, vehicleId: event.target.value }))}
+            >
+              <option value="">All vehicles</option>
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>
+                  {vehicle.plateNumber} • {vehicle.make} {vehicle.model}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="fuel-filter-driver-id">Driver ID</Label>
-            <Input
+            <Label htmlFor="fuel-filter-driver-id">Driver</Label>
+            <select
               id="fuel-filter-driver-id"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={draftFilters.driverId || ''}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, driverId: event.target.value.trim() }))}
-              placeholder="Optional UUID"
-            />
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, driverId: event.target.value }))}
+            >
+              <option value="">All drivers</option>
+              {availableDrivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {(driver.name || 'Unknown')} • {driver.email}
+                </option>
+              ))}
+            </select>
+            {usersLookupErrorMessage ? (
+              <p className="text-xs text-muted-foreground">Driver directory is temporarily unavailable: {usersLookupErrorMessage}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -403,7 +423,7 @@ export function FuelLogsPage() {
                       <td className="px-4 py-3">{vehicleLabelById.get(log.vehicleId) || shortId(log.vehicleId)}</td>
                       <td className="px-4 py-3">{shortId(log.driverId)}</td>
                       <td className="px-4 py-3">{log.litersFilled.toFixed(2)} L</td>
-                      <td className="px-4 py-3">{currencyFormatter.format(log.totalCost)}</td>
+                      <td className="px-4 py-3">{formatPhpCurrency(log.totalCost)}</td>
                       <td className="px-4 py-3">{log.stationName || 'N/A'}</td>
                       <td className="px-4 py-3">{formatDistance(log.odometerReadingKm)}</td>
                       <td className="px-4 py-3">
@@ -488,9 +508,8 @@ export function FuelLogsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="driverId">Driver ID</Label>
-                <Input id="driverId" autoComplete="off" placeholder="Optional UUID" {...register('driverId')} />
-                {errors.driverId ? <p className="text-sm text-destructive">{errors.driverId.message}</p> : null}
+                <Label>Driver</Label>
+                <Input value={user?.email || 'Unknown user'} readOnly disabled />
               </div>
 
               <div className="space-y-2">

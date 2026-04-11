@@ -28,6 +28,12 @@ jwt:
   secret: ${JWT_SECRET}
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
+graphhopper:
+  api:
+    base-url: ${GRAPHHOPPER_BASE_URL:https://graphhopper.com/api/1/route}
+    key: ${GRAPHHOPPER_API_KEY:}
+    vehicle: ${GRAPHHOPPER_VEHICLE:car}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

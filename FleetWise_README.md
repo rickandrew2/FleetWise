@@ -45,6 +45,8 @@ Working rules:
 
 ## Project Overview
 
+In one sentence: FleetWise helps Philippine logistics companies stop guessing about fuel costs and start making informed decisions through complete fuel tracking, driver efficiency scoring, automated alerts, and clean reports.
+
 **Problem it solves:**
 A logistics company with 20–100+ vehicles spends a massive portion of operating costs on fuel — especially as fuel prices rise. They need to know:
 - Which vehicles are consuming more fuel than expected?
@@ -52,15 +54,27 @@ A logistics company with 20–100+ vehicles spends a massive portion of operatin
 - Which routes are fuel-heavy and can be optimized?
 - What does the monthly fuel cost breakdown look like per vehicle/driver?
 
-**FleetWise** is the backend API system that answers all of these questions.
+**FleetWise** is the web-based fleet fuel intelligence system that answers all of these questions, with this repository focused on the Spring Boot API and the paired React frontend.
+
+**Who it serves:**
+- Company owners who need clear monthly fuel cost visibility
+- Fleet managers who need daily operational insight and alerts
+- Drivers who log trips and fill-ups and track their efficiency
 
 **Key capabilities:**
 - Register fleet vehicles with real manufacturer MPG specs (pulled from FuelEconomy.gov)
-- Log every fill-up: liters, cost, odometer reading
+- Log every fill-up: liters, cost, station, driver, odometer, date
 - Record routes and calculate actual vs expected fuel consumption
-- Score each driver's fuel efficiency
-- Fire alerts when consumption anomalies are detected
-- Generate weekly/monthly PDF and Excel cost reports automatically
+- Score driver fuel efficiency based on route-level fuel use
+- Fire alerts when anomalies are detected (overconsumption, unusual fill-up, high cost, maintenance signals)
+- Generate weekly/monthly PDF and Excel reports automatically
+- Provide a live dashboard with cost, efficiency, and alert indicators
+
+**What FleetWise is not:**
+- Not a real-time GPS tracker
+- Not a payroll system
+- Not a maintenance booking system
+- Not a consumer fuel app
 
 ---
 

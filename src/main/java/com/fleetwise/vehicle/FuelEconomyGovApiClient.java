@@ -48,7 +48,13 @@ public class FuelEconomyGovApiClient implements FuelEconomyApiClient {
                 String label = readChildText(item, "text");
                 if (idText != null && !idText.isBlank()) {
                     try {
-                        options.add(new EpaVehicleOption(Integer.parseInt(idText.trim()), label));
+                        int epaVehicleId = Integer.parseInt(idText.trim());
+                        Optional<FuelEconomyVehicleData> details = fetchVehicleData(epaVehicleId);
+                        options.add(new EpaVehicleOption(
+                                epaVehicleId,
+                                label,
+                                details.map(FuelEconomyVehicleData::combinedMpg).orElse(null),
+                                details.map(FuelEconomyVehicleData::fuelType).orElse(null)));
                     } catch (NumberFormatException ignored) {
                         // Ignore malformed entries and keep parsing safe.
                     }

@@ -54,6 +54,14 @@ public class RouteLogController {
         return routeLogService.getRouteLogById(authentication.getName(), id);
     }
 
+    @GetMapping("/top-inefficient")
+    @PreAuthorize("hasAnyRole('ADMIN','FLEET_MANAGER','DRIVER')")
+    public List<RouteLogResponse> getTopInefficientRoutes(Authentication authentication,
+            @RequestParam(required = false) UUID driverId,
+            @RequestParam(required = false) Integer limit) {
+        return routeLogService.getTopInefficientRoutes(authentication.getName(), driverId, limit);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('ADMIN')")

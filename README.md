@@ -1,6 +1,12 @@
 # FleetWise
 
+FleetWise helps Philippine logistics teams reduce fuel waste by tracking every fill-up, scoring driver efficiency, surfacing alerts automatically, and generating operational reports.
+
 This repository uses [FleetWise_README.md](FleetWise_README.md) as the canonical, living project guide.
+
+Read product context first:
+- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the plain-language business explanation
+- [FleetWise_README.md](FleetWise_README.md) for architecture, schema, APIs, and implementation roadmap
 
 If you are starting implementation, begin there first:
 - architecture and module flow
@@ -14,10 +20,11 @@ If you are starting implementation, begin there first:
 1. Complete local environment setup using [DEV_SETUP_WINDOWS.md](DEV_SETUP_WINDOWS.md)
 2. From repository root, install root helper scripts once: `npm install`
 3. Start full stack from root with one command: `npm run dev`
-4. Open [FleetWise_README.md](FleetWise_README.md)
-5. Follow the Week 1 roadmap tasks first
-6. Build module-by-module in the documented order
-7. Update FleetWise_README.md whenever requirements or contracts change
+4. Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)
+5. Open [FleetWise_README.md](FleetWise_README.md)
+6. Follow the Week 1 roadmap tasks first
+7. Build module-by-module in the documented order
+8. Update FleetWise_README.md whenever requirements or contracts change
 
 ## Development Commands
 

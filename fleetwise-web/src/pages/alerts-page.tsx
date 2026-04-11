@@ -6,19 +6,17 @@ import {
   alertsListRequest,
   markAlertAsReadRequest,
   parseApiError,
+  usersListRequest,
   vehiclesListRequest,
 } from '@/lib/api'
-import { notifyApiError, notifyError, notifySuccess } from '@/lib/notify'
+import { notifyApiError, notifySuccess } from '@/lib/notify'
 import { useAuth } from '@/providers/auth-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
-import type { AlertQueryFilters, AlertType } from '@/types/api'
-
-const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import type { AlertQueryFilters, AlertType, UserSummaryResponse } from '@/types/api'
 const alertTypeOptions: AlertType[] = ['OVERCONSUMPTION', 'HIGH_COST', 'MAINTENANCE_DUE', 'UNUSUAL_FILLUP']
 
 type AlertDraftFilters = {
@@ -80,6 +78,16 @@ export function AlertsPage() {
     queryFn: vehiclesListRequest,
   })
 
+  const canBrowseUsers = user?.role === 'ADMIN' || user?.role === 'FLEET_MANAGER'
+
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: usersListRequest,
+    enabled: canBrowseUsers,
+  })
+
+  const usersLookupError = canBrowseUsers ? usersQuery.error : null
+
   const alertsQuery = useQuery({
     queryKey: ['alerts', appliedFilters],
     queryFn: () => alertsListRequest(appliedFilters),
@@ -110,7 +118,7 @@ export function AlertsPage() {
     return new Map(data.map((vehicle) => [vehicle.id, `${vehicle.plateNumber} • ${vehicle.make} ${vehicle.model}`]))
   }, [vehiclesQuery.data])
 
-  const isLoading = vehiclesQuery.isLoading || alertsQuery.isLoading || unreadCountQuery.isLoading
+  const isLoading = vehiclesQuery.isLoading || alertsQuery.isLoading || unreadCountQuery.isLoading || (canBrowseUsers && usersQuery.isLoading)
   if (isLoading) {
     return <PageLoadingState />
   }
@@ -131,20 +139,23 @@ export function AlertsPage() {
     )
   }
 
+  const usersLookupErrorMessage = usersLookupError
+    ? parseApiError(usersLookupError).message || 'Unable to load driver list for filtering.'
+    : null
+
   const alerts = alertsQuery.data || []
   const unreadCount = unreadCountQuery.data?.unreadCount ?? 0
+  const availableDrivers: UserSummaryResponse[] = canBrowseUsers
+    ? (usersQuery.data && usersQuery.data.length > 0
+      ? usersQuery.data
+      : user
+        ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+        : [])
+    : user
+      ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+      : []
 
   function applyFilters() {
-    if (draftFilters.vehicleId && !uuidRegex.test(draftFilters.vehicleId)) {
-      notifyError('Vehicle ID filter must be a valid UUID.')
-      return
-    }
-
-    if (draftFilters.driverId && !uuidRegex.test(draftFilters.driverId)) {
-      notifyError('Driver ID filter must be a valid UUID.')
-      return
-    }
-
     setAppliedFilters(toAppliedFilters(draftFilters))
   }
 
@@ -193,23 +204,40 @@ export function AlertsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="alert-filter-vehicle-id">Vehicle ID</Label>
-            <Input
+            <Label htmlFor="alert-filter-vehicle-id">Vehicle</Label>
+            <select
               id="alert-filter-vehicle-id"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={draftFilters.vehicleId}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, vehicleId: event.target.value.trim() }))}
-              placeholder="Optional UUID"
-            />
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, vehicleId: event.target.value }))}
+            >
+              <option value="">All vehicles</option>
+              {(vehiclesQuery.data ?? []).map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>
+                  {vehicle.plateNumber} • {vehicle.make} {vehicle.model}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="alert-filter-driver-id">Driver ID</Label>
-            <Input
+            <Label htmlFor="alert-filter-driver-id">Driver</Label>
+            <select
               id="alert-filter-driver-id"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={draftFilters.driverId}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, driverId: event.target.value.trim() }))}
-              placeholder="Optional UUID"
-            />
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, driverId: event.target.value }))}
+            >
+              <option value="">All drivers</option>
+              {availableDrivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {(driver.name || 'Unknown')} • {driver.email}
+                </option>
+              ))}
+            </select>
+            {usersLookupErrorMessage ? (
+              <p className="text-xs text-muted-foreground">Driver directory is temporarily unavailable: {usersLookupErrorMessage}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">

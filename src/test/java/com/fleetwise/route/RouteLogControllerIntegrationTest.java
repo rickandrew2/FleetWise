@@ -168,6 +168,17 @@ class RouteLogControllerIntegrationTest {
                 .andExpect(jsonPath("$.totalTrips").value(1))
                 .andExpect(jsonPath("$.totalDistanceKm").isNumber());
 
+        mockMvc.perform(get("/api/routes/top-inefficient")
+                .header("Authorization", "Bearer " + managerToken)
+                .param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").isNotEmpty());
+
+        mockMvc.perform(get("/api/routes/top-inefficient")
+                .header("Authorization", "Bearer " + driverToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].driverId").value(driverUser.getId().toString()));
+
         mockMvc.perform(get("/api/routes/" + managerRouteLogId)
                 .header("Authorization", "Bearer " + driverToken))
                 .andExpect(status().isNotFound());

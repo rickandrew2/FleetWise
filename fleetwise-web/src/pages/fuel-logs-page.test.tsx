@@ -9,6 +9,7 @@ import {
   fuelLogsListRequest,
   fuelLogStatsRequest,
   parseApiError,
+  usersListRequest,
   vehiclesListRequest,
 } from '@/lib/api'
 import { useAuth } from '@/providers/auth-provider'
@@ -33,6 +34,7 @@ vi.mock('@/lib/api', async () => {
     createFuelLogRequest: vi.fn(),
     deleteFuelLogRequest: vi.fn(),
     parseApiError: vi.fn(),
+    usersListRequest: vi.fn(),
   }
 })
 
@@ -43,6 +45,7 @@ const mockedFuelLogStats = vi.mocked(fuelLogStatsRequest)
 const mockedCreateFuelLog = vi.mocked(createFuelLogRequest)
 const mockedDeleteFuelLog = vi.mocked(deleteFuelLogRequest)
 const mockedParseApiError = vi.mocked(parseApiError)
+const mockedUsersList = vi.mocked(usersListRequest)
 
 function renderWithClient() {
   const queryClient = new QueryClient({
@@ -95,6 +98,14 @@ describe('FuelLogsPage', () => {
       },
     ])
     mockedFuelLogsList.mockResolvedValue([])
+    mockedUsersList.mockResolvedValue([
+      {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        name: 'Admin User',
+        email: 'admin@fleetwise.test',
+        role: 'ADMIN',
+      },
+    ])
     mockedFuelLogStats.mockResolvedValue({
       totalLogs: 0,
       totalCost: 0,
@@ -123,7 +134,7 @@ describe('FuelLogsPage', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Add Fuel Log' }))
-    await user.selectOptions(screen.getByLabelText('Vehicle'), '550e8400-e29b-41d4-a716-446655440001')
+    await user.selectOptions(screen.getByLabelText('Vehicle', { selector: 'select#vehicleId' }), '550e8400-e29b-41d4-a716-446655440001')
     await user.clear(screen.getByLabelText('Liters Filled'))
     await user.type(screen.getByLabelText('Liters Filled'), '40')
     await user.clear(screen.getByLabelText('Price Per Liter'))
