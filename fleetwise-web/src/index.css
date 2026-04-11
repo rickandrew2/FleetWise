@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Public+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 35 75% 97%;
+    --foreground: 214 33% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 214 33% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 214 33% 17%;
+    --primary: 194 77% 33%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 36 48% 93%;
+    --secondary-foreground: 214 33% 17%;
+    --muted: 35 39% 94%;
+    --muted-foreground: 215 15% 43%;
+    --accent: 25 84% 56%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 31 34% 84%;
+    --input: 31 34% 84%;
+    --ring: 194 77% 33%;
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Public Sans', 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 10% -10%, rgba(32, 149, 179, 0.17), transparent 30%),
+      radial-gradient(circle at 90% -5%, rgba(240, 132, 66, 0.22), transparent 26%),
+      linear-gradient(180deg, rgba(255, 251, 244, 0.65), rgba(255, 255, 255, 0.92));
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .surface-panel {
+    @apply rounded-2xl border bg-card/90 shadow-[0_18px_45px_-30px_rgba(15,42,54,0.45)] backdrop-blur-sm;
+  }
+}

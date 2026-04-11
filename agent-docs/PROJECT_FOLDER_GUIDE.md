@@ -11,7 +11,7 @@ Quick companion:
 
 ## 1. What You Are Looking At
 
-FleetWise backend is a Spring Boot 3 API using Java 17, PostgreSQL, Flyway migrations, JWT auth, and role-based authorization.
+FleetWise backend is a Spring Boot 3.5.13 API using Java 25, PostgreSQL, Flyway migrations, JWT auth, and role-based authorization.
 
 Architecture style: Layered Modular Monolith.
 
@@ -27,8 +27,8 @@ If you come from Node/Next:
 
 From `pom.xml`:
 
-- Spring Boot 3.3.4
-- Java 17
+- Spring Boot 3.5.13
+- Java 25
 - `spring-boot-starter-web` (REST API)
 - `spring-boot-starter-security` (authn/authz)
 - `spring-boot-starter-data-jpa` (ORM/data layer)

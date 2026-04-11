@@ -111,3 +111,31 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Fix**: Added `lombok.version` property, pinned Lombok `1.18.44`, and configured `maven-compiler-plugin` `annotationProcessorPaths` for Lombok.
 - **Avoid**: For latest JDK upgrades, explicitly configure annotation processors instead of relying on implicit behavior.
 - **Date**: 2026-04-10
+
+### [CONFIG] React Router v6 minor version carried known high CVE
+- **Symptom**: `npm audit --omit=dev` reported 3 high vulnerabilities after installing `react-router-dom@6.30.1`.
+- **Root Cause**: `react-router-dom@6.30.1` depends on vulnerable `@remix-run/router` versions (open redirect/XSS advisory path).
+- **Fix**: Upgraded and pinned to patched `react-router-dom@6.30.3` and re-ran `npm audit` to confirm zero high/critical vulnerabilities.
+- **Avoid**: Do not pin older v6 patch releases without running `npm audit` immediately; prefer latest patched v6 patchline.
+- **Date**: 2026-04-10
+
+### [CONFIG] Strict Java enforcement requires Maven toolchains entry
+- **Symptom**: Maven validate/build failed with toolchain selection errors after enabling strict Java 25 enforcement.
+- **Root Cause**: `maven-toolchains-plugin` was configured to require JDK 25, but no matching `~/.m2/toolchains.xml` entry existed.
+- **Fix**: Added a JDK 25 toolchain definition in `~/.m2/toolchains.xml` and verified Maven resolved `JDK[C:/Users/Acer/.jdk/jdk-25]` during `test` and `package`.
+- **Avoid**: Do not enable strict toolchain enforcement without documenting and provisioning `toolchains.xml` on developer machines and CI agents.
+- **Date**: 2026-04-10
+
+### [CONFIG] Root dev orchestration stopped after DB bootstrap success
+- **Symptom**: `npm run dev` started services, then backend/frontend were terminated right after `dev:db` exited with code 0.
+- **Root Cause**: Root `dev` script used `concurrently -k`, which kills sibling processes when any command exits, including a successful one-shot DB bootstrap command.
+- **Fix**: Removed `-k` from the root `dev` script so `dev:db` can finish while backend/frontend continue running.
+- **Avoid**: Do not use `-k` in mixed one-shot + long-running orchestration commands unless all commands are expected to stay alive.
+- **Date**: 2026-04-10
+
+### [TYPE] Zod coerce schema caused React Hook Form resolver mismatch
+- **Symptom**: Frontend build failed with TypeScript error in `vehicles-page.tsx` because `zodResolver(vehicleFormSchema)` inferred `year` input as `unknown` while the form type expected `number`.
+- **Root Cause**: `z.coerce.number()` changed Zod input/output typing in a way that conflicted with generic type inference in `useForm<VehicleFormValues>`.
+- **Fix**: Switched `year` field schema to validated string input, then converted to number in payload mapping (`toVehiclePayload`).
+- **Avoid**: In typed RHF forms, avoid mixed input/output coercion unless using explicit `useForm` generic input/output signatures.
+- **Date**: 2026-04-11

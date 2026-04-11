@@ -12,7 +12,42 @@ If you are starting implementation, begin there first:
 ## Quick Start
 
 1. Complete local environment setup using [DEV_SETUP_WINDOWS.md](DEV_SETUP_WINDOWS.md)
-2. Open [FleetWise_README.md](FleetWise_README.md)
-3. Follow the Week 1 roadmap tasks first
-4. Build module-by-module in the documented order
-5. Update FleetWise_README.md whenever requirements or contracts change
+2. From repository root, install root helper scripts once: `npm install`
+3. Start full stack from root with one command: `npm run dev`
+4. Open [FleetWise_README.md](FleetWise_README.md)
+5. Follow the Week 1 roadmap tasks first
+6. Build module-by-module in the documented order
+7. Update FleetWise_README.md whenever requirements or contracts change
+
+## Development Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start Docker Postgres, Spring Boot API, and Vite frontend in parallel. |
+| `npm run dev:db` | Start Postgres service only using Docker Compose. |
+| `npm run dev:backend` | Start Spring Boot backend only. |
+| `npm run dev:frontend` | Start Vite frontend only. |
+| `npm run test` | Run backend tests and frontend lint checks. |
+| `npm run build` | Build backend package and frontend production bundle. |
+| `npm run down` | Stop Docker Compose infrastructure services. |
+
+### Java 25 Toolchain Requirement
+
+Builds enforce Java 25 and Maven 3.9+ in all environments.
+
+Add a `~/.m2/toolchains.xml` file with a JDK 25 entry (update the `jdkHome` path for your machine):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<toolchains>
+	<toolchain>
+		<type>jdk</type>
+		<provides>
+			<version>25</version>
+		</provides>
+		<configuration>
+			<jdkHome>C:/Users/Acer/.jdk/jdk-25</jdkHome>
+		</configuration>
+	</toolchain>
+</toolchains>
+```
