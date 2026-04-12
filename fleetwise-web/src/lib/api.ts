@@ -12,9 +12,13 @@ import type {
   DownloadedReport,
   EpaLookupRequest,
   EpaVehicleOptionResponse,
+  FuelPriceCurrentResponse,
+  FuelPriceHistoryPointResponse,
+  FuelPriceManualUpdateRequest,
   FuelLogResponse,
   FuelLogStatsResponse,
   FuelLogUpsertRequest,
+  FuelPriceUpdateResultResponse,
   GenerateReportRequest,
   LoginRequest,
   LogQueryFilters,
@@ -107,6 +111,41 @@ const fuelLogStatsSchema = z.object({
   totalLogs: z.number().int(),
   totalCost: z.number().nullable(),
   averageLitersPerLog: z.number().nullable(),
+})
+
+const fuelPriceTypeSchema = z.enum(['DIESEL', 'GASOLINE_91', 'GASOLINE_95', 'DIESEL_PLUS'])
+
+const fuelPriceCurrentSchema = z.object({
+  fuelType: fuelPriceTypeSchema,
+  pricePerLiter: z.number().positive(),
+  effectiveDate: isoDateSchema,
+  source: z.string(),
+  stale: z.boolean(),
+})
+
+const fuelPriceHistoryPointSchema = z.object({
+  fuelType: fuelPriceTypeSchema,
+  effectiveDate: isoDateSchema,
+  averagePricePerLiter: z.number().positive(),
+})
+
+const fuelPriceManualEntrySchema = z.object({
+  fuelType: fuelPriceTypeSchema,
+  pricePerLiter: z.number().positive(),
+  brand: z.string().nullable().optional(),
+})
+
+const fuelPriceManualUpdateSchema = z.object({
+  effectiveDate: isoDateSchema,
+  source: z.string().min(1).max(100),
+  entries: z.array(fuelPriceManualEntrySchema).min(1),
+})
+
+const fuelPriceUpdateResultSchema = z.object({
+  updatedRecords: z.number().int().nonnegative(),
+  effectiveDate: isoDateSchema.nullable(),
+  fallbackUsed: z.boolean(),
+  message: z.string(),
 })
 
 const routeLogSchema = z.object({
@@ -339,6 +378,33 @@ export async function meRequest() {
 export async function dashboardSummaryRequest() {
   const { data } = await api.get<DashboardSummaryResponse>('/api/dashboard/summary')
   return parseWithSchema(dashboardSummarySchema, data, 'dashboard summary')
+}
+
+export async function fuelPricesCurrentRequest() {
+  const { data } = await api.get<FuelPriceCurrentResponse[]>('/api/fuel-prices/current')
+  return parseWithSchema(z.array(fuelPriceCurrentSchema), data, 'current fuel prices list')
+}
+
+export async function fuelPriceCurrentByTypeRequest(fuelType: string) {
+  const safeFuelType = parseWithSchema(fuelPriceTypeSchema, fuelType, 'fuel price type')
+  const { data } = await api.get<FuelPriceCurrentResponse>(`/api/fuel-prices/current/${safeFuelType}`)
+  return parseWithSchema(fuelPriceCurrentSchema, data, 'current fuel price')
+}
+
+export async function fuelPriceHistoryRequest() {
+  const { data } = await api.get<FuelPriceHistoryPointResponse[]>('/api/fuel-prices/history')
+  return parseWithSchema(z.array(fuelPriceHistoryPointSchema), data, 'fuel price history')
+}
+
+export async function fuelPricesManualUpdateRequest(payload: FuelPriceManualUpdateRequest) {
+  const safePayload = parseWithSchema(fuelPriceManualUpdateSchema, payload, 'fuel price manual update payload')
+  const { data } = await api.post<FuelPriceUpdateResultResponse>('/api/fuel-prices/manual-update', safePayload)
+  return parseWithSchema(fuelPriceUpdateResultSchema, data, 'fuel price update result')
+}
+
+export async function fuelPricesTriggerUpdateRequest() {
+  const { data } = await api.post<FuelPriceUpdateResultResponse>('/api/fuel-prices/trigger-update')
+  return parseWithSchema(fuelPriceUpdateResultSchema, data, 'fuel price update result')
 }
 
 export async function dashboardTopDriversRequest() {

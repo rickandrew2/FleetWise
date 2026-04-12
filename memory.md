@@ -181,3 +181,45 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Fix**: Made users lookup non-blocking, kept core queries as gatekeepers, and added a small helper message/fallback driver option when user directory fetch fails.
 - **Avoid**: Do not fail entire page renders for secondary enrichment/filter queries.
 - **Date**: 2026-04-11
+
+### [UI] Avoid sync setState in effects for derived pagination
+- **Symptom**: Frontend lint failed with `react-hooks/set-state-in-effect` after pagination changes.
+- **Root Cause**: Component used `useEffect` only to clamp page state (`setCurrentPage(totalPages)`), creating an avoidable cascade render pattern.
+- **Fix**: Removed the effect and used a derived `normalizedCurrentPage` value for rendering, slicing, and pagination controls.
+- **Avoid**: Do not use effects to sync state that can be derived directly during render.
+- **Date**: 2026-04-11
+
+### [CONFIG] pgAdmin container restart loop from invalid default email domain
+- **Symptom**: `fleetwise-pgadmin` kept restarting and logs reported `does not appear to be a valid email address`.
+- **Root Cause**: `PGADMIN_DEFAULT_EMAIL` default used `admin@fleetwise.local`, which pgAdmin's validator rejected.
+- **Fix**: Changed Docker Compose default to a valid email (`admin@fleetwise.com`) and recreated the pgAdmin container.
+- **Avoid**: Do not use `.local` placeholder domains for pgAdmin default login email unless confirmed accepted by the current image validator.
+- **Date**: 2026-04-12
+
+### [CONFIG] pgAdmin login spinner from CSRF bootstrap mismatch on localhost
+- **Symptom**: Login page stayed on spinner or returned `The CSRF token is missing. You need to refresh the page.` in some browser sessions.
+- **Root Cause**: In server mode, pgAdmin login bootstrap occasionally hit CSRF/session mismatch with cached browser session state.
+- **Fix**: Set `PGADMIN_CONFIG_SERVER_MODE: "False"` in Docker Compose for local development and recreated the pgAdmin container.
+- **Avoid**: For local single-user Docker setups, prefer pgAdmin desktop mode to avoid login bootstrap/CSRF friction.
+- **Date**: 2026-04-12
+
+### [CONFIG] pgAdmin desktop mode caused 401 Unauthorized in normal browser
+- **Symptom**: `http://localhost:5050` returned plain `401 Unauthorized` in real browsers while integrated session seemed to work.
+- **Root Cause**: For this containerized setup, forcing `PGADMIN_CONFIG_SERVER_MODE=False` made standard browser access fail consistently.
+- **Fix**: Removed `PGADMIN_CONFIG_SERVER_MODE` override, recreated pgAdmin, and used standard server-mode login page.
+- **Avoid**: Do not force desktop mode in this Docker setup unless fully validating regular browser access routes.
+- **Date**: 2026-04-12
+
+### [CONFIG] pgAdmin infinite spinner with RequireJS mismatch in normal browser
+- **Symptom**: Login page stayed on infinite spinner and browser console showed `Uncaught Error: Mismatched anonymous define()` from `require.min.js`.
+- **Root Cause**: Browser-side module bootstrap conflict (stale cached assets and/or extension-injected scripts) while server assets were healthy.
+- **Fix**: Kept pgAdmin in server mode, added `PGADMIN_CONFIG_SEND_FILE_MAX_AGE_DEFAULT: 0`, exposed a fresh origin port `5051`, and reopened pgAdmin from that new origin.
+- **Avoid**: If RequireJS mismatch appears again, use a clean origin/profile (new port or incognito with extensions disabled) before assuming backend failure.
+- **Date**: 2026-04-12
+
+### [CONFIG] Persistent pgAdmin spinner resolved by CloudBeaver fallback
+- **Symptom**: pgAdmin kept spinning in normal browser profiles even after cache and origin workarounds.
+- **Root Cause**: Client-side RequireJS/bootstrap conflicts can persist per browser profile and are hard to fully eliminate quickly.
+- **Fix**: Added `cloudbeaver` service in Docker Compose (`localhost:8978`) as the primary browser DB UI fallback.
+- **Avoid**: Do not block local DB browsing workflows on pgAdmin-only path when browser-specific script conflicts persist.
+- **Date**: 2026-04-12

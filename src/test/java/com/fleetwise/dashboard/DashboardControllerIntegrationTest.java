@@ -132,7 +132,7 @@ class DashboardControllerIntegrationTest {
         vehicle.setMake("Toyota");
         vehicle.setModel("Hilux");
         vehicle.setYear(2022);
-        vehicle.setFuelType("Diesel");
+        vehicle.setFuelType("DIESEL");
         vehicle.setTankCapacityLiters(new BigDecimal("70.00"));
         vehicle.setCombinedMpg(new BigDecimal("25.00"));
         return vehicleRepository.save(vehicle);

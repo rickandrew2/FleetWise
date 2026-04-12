@@ -1,5 +1,6 @@
 package com.fleetwise.vehicle;
 
+import com.fleetwise.fuelprice.FuelPriceType;
 import com.fleetwise.fuellog.FuelLog;
 import com.fleetwise.fuellog.FuelLogRepository;
 import com.fleetwise.route.RouteLog;
@@ -141,7 +142,7 @@ public class VehicleService {
         vehicle.setMake(request.make().trim());
         vehicle.setModel(request.model().trim());
         vehicle.setYear(request.year());
-        vehicle.setFuelType(trimToNull(request.fuelType()));
+        vehicle.setFuelType(normalizeFuelTypeOrNull(request.fuelType()));
         vehicle.setTankCapacityLiters(toDecimal(request.tankCapacityLiters()));
         vehicle.setEpaVehicleId(request.epaVehicleId());
         vehicle.setAssignedDriverId(request.assignedDriverId());
@@ -157,7 +158,9 @@ public class VehicleService {
         vehicle.setCityMpg(toDecimal(data.cityMpg()));
         vehicle.setHighwayMpg(toDecimal(data.highwayMpg()));
         if (vehicle.getFuelType() == null || vehicle.getFuelType().isBlank()) {
-            vehicle.setFuelType(data.fuelType());
+            vehicle.setFuelType(FuelPriceType.fromVehicleFuelType(data.fuelType())
+                    .map(FuelPriceType::name)
+                    .orElse(null));
         }
     }
 
@@ -188,6 +191,18 @@ public class VehicleService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeFuelTypeOrNull(String fuelType) {
+        String trimmed = trimToNull(fuelType);
+        if (trimmed == null) {
+            return null;
+        }
+
+        return FuelPriceType.fromVehicleFuelType(trimmed)
+                .map(FuelPriceType::name)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Fuel type must be one of: DIESEL, GASOLINE_91, GASOLINE_95, DIESEL_PLUS"));
     }
 
     private BigDecimal toDecimal(Double value) {

@@ -72,6 +72,7 @@ export function AlertsPage() {
   const { user } = useAuth()
   const [draftFilters, setDraftFilters] = useState<AlertDraftFilters>(initialDraftFilters)
   const [appliedFilters, setAppliedFilters] = useState<AlertQueryFilters>(toAppliedFilters(initialDraftFilters))
+  const [selectedAlertIds, setSelectedAlertIds] = useState<string[]>([])
 
   const vehiclesQuery = useQuery({
     queryKey: ['vehicles'],
@@ -113,6 +114,25 @@ export function AlertsPage() {
     },
   })
 
+  const markManyReadMutation = useMutation({
+    mutationFn: async (alertIds: string[]) => {
+      await Promise.all(alertIds.map((alertId) => markAlertAsReadRequest(alertId)))
+      return alertIds.length
+    },
+    onSuccess: async (markedCount) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['alerts'] }),
+        queryClient.invalidateQueries({ queryKey: ['alertUnreadCount'] }),
+      ])
+      setSelectedAlertIds([])
+      notifySuccess(`${markedCount} alert${markedCount === 1 ? '' : 's'} marked as read.`)
+    },
+    onError: (error) => {
+      const parsed = parseApiError(error)
+      notifyApiError(parsed, 'Failed to mark selected alerts as read.')
+    },
+  })
+
   const vehicleLabelById = useMemo(() => {
     const data = vehiclesQuery.data ?? []
     return new Map(data.map((vehicle) => [vehicle.id, `${vehicle.plateNumber} • ${vehicle.make} ${vehicle.model}`]))
@@ -145,6 +165,10 @@ export function AlertsPage() {
 
   const alerts = alertsQuery.data || []
   const unreadCount = unreadCountQuery.data?.unreadCount ?? 0
+  const unreadAlertIds = alerts.filter((alert) => !alert.isRead).map((alert) => alert.id)
+  const selectedUnreadAlertIds = selectedAlertIds.filter((alertId) => unreadAlertIds.includes(alertId))
+  const allUnreadSelected = unreadAlertIds.length > 0 && unreadAlertIds.every((alertId) => selectedUnreadAlertIds.includes(alertId))
+  const isMutating = markReadMutation.isPending || markManyReadMutation.isPending
   const availableDrivers: UserSummaryResponse[] = canBrowseUsers
     ? (usersQuery.data && usersQuery.data.length > 0
       ? usersQuery.data
@@ -157,11 +181,43 @@ export function AlertsPage() {
 
   function applyFilters() {
     setAppliedFilters(toAppliedFilters(draftFilters))
+    setSelectedAlertIds([])
   }
 
   function resetFilters() {
     setDraftFilters(initialDraftFilters)
     setAppliedFilters(toAppliedFilters(initialDraftFilters))
+    setSelectedAlertIds([])
+  }
+
+  function toggleAlertSelection(alertId: string, checked: boolean) {
+    setSelectedAlertIds((previous) => {
+      if (checked) {
+        if (previous.includes(alertId)) {
+          return previous
+        }
+        return [...previous, alertId]
+      }
+
+      return previous.filter((id) => id !== alertId)
+    })
+  }
+
+  function toggleAllUnreadSelection(checked: boolean) {
+    if (checked) {
+      setSelectedAlertIds(unreadAlertIds)
+      return
+    }
+
+    setSelectedAlertIds([])
+  }
+
+  async function markSelectedAsRead() {
+    if (selectedUnreadAlertIds.length === 0) {
+      return
+    }
+
+    await markManyReadMutation.mutateAsync(selectedUnreadAlertIds)
   }
 
   return (
@@ -276,10 +332,50 @@ export function AlertsPage() {
               description="No alerts match the current filter selection."
             />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/80">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {selectedUnreadAlertIds.length} unread alert{selectedUnreadAlertIds.length === 1 ? '' : 's'} selected
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={selectedAlertIds.length === 0 || isMutating}
+                    onClick={() => setSelectedAlertIds([])}
+                  >
+                    Clear Selection
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-11"
+                    disabled={selectedUnreadAlertIds.length === 0 || isMutating}
+                    onClick={() => {
+                      void markSelectedAsRead()
+                    }}
+                  >
+                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                    Mark Selected Read
+                  </Button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-border/80">
               <table className="min-w-full text-sm">
                 <thead className="bg-secondary/40 text-left">
                   <tr>
+                    <th className="px-4 py-3 font-semibold">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-input"
+                        checked={allUnreadSelected}
+                        disabled={unreadAlertIds.length === 0 || isMutating}
+                        onChange={(event) => toggleAllUnreadSelection(event.target.checked)}
+                        aria-label="Select all unread alerts"
+                      />
+                    </th>
                     <th className="px-4 py-3 font-semibold">Triggered</th>
                     <th className="px-4 py-3 font-semibold">Type</th>
                     <th className="px-4 py-3 font-semibold">Message</th>
@@ -292,6 +388,16 @@ export function AlertsPage() {
                 <tbody>
                   {alerts.map((alert) => (
                     <tr key={alert.id} className="border-t border-border/80">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input"
+                          checked={selectedAlertIds.includes(alert.id)}
+                          disabled={alert.isRead || isMutating}
+                          onChange={(event) => toggleAlertSelection(alert.id, event.target.checked)}
+                          aria-label={`Select alert ${alert.id}`}
+                        />
+                      </td>
                       <td className="px-4 py-3">{new Date(alert.triggeredAt).toLocaleString()}</td>
                       <td className="px-4 py-3"><Badge variant="secondary">{formatAlertType(alert.alertType)}</Badge></td>
                       <td className="px-4 py-3">
@@ -315,7 +421,7 @@ export function AlertsPage() {
                           variant="outline"
                           size="sm"
                           className="min-h-11"
-                          disabled={alert.isRead || markReadMutation.isPending}
+                          disabled={alert.isRead || isMutating}
                           onClick={() => {
                             void markReadMutation.mutateAsync(alert.id)
                           }}
@@ -329,6 +435,7 @@ export function AlertsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
         </CardContent>

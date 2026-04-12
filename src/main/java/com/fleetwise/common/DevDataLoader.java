@@ -98,15 +98,15 @@ public class DevDataLoader implements ApplicationRunner {
         User driver2 = usersByEmail.get("driver2@fleetwise.local");
 
         List<VehicleSeedSpec> specs = List.of(
-                new VehicleSeedSpec("ABC-1234", "Toyota", "Hilux", 2020, "Diesel", 80.0, 46269, 22.0,
+                new VehicleSeedSpec("ABC-1234", "Toyota", "Hilux", 2020, "DIESEL", 80.0, 46269, 22.0,
                         driver1 == null ? null : driver1.getId()),
-                new VehicleSeedSpec("XYZ-5678", "Mitsubishi", "L300", 2019, "Diesel", 65.0, 43572, 18.0,
+                new VehicleSeedSpec("XYZ-5678", "Mitsubishi", "L300", 2019, "DIESEL", 65.0, 43572, 18.0,
                         driver1 == null ? null : driver1.getId()),
-                new VehicleSeedSpec("DEF-9012", "Isuzu", "D-Max", 2021, "Diesel", 76.0, 47891, 24.0,
+                new VehicleSeedSpec("DEF-9012", "Isuzu", "D-Max", 2021, "DIESEL", 76.0, 47891, 24.0,
                         driver2 == null ? null : driver2.getId()),
-                new VehicleSeedSpec("GHI-3456", "Ford", "Ranger", 2020, "Diesel", 80.0, 46187, 23.0,
+                new VehicleSeedSpec("GHI-3456", "Ford", "Ranger", 2020, "DIESEL", 80.0, 46187, 23.0,
                         driver2 == null ? null : driver2.getId()),
-                new VehicleSeedSpec("JKL-7890", "Toyota", "Hi-Ace", 2018, "Gasoline", 70.0, 40761, 20.0, null));
+                new VehicleSeedSpec("JKL-7890", "Toyota", "Hi-Ace", 2018, "GASOLINE_91", 70.0, 40761, 20.0, null));
 
         for (VehicleSeedSpec spec : specs) {
             if (vehicleRepository.existsByPlateNumberIgnoreCase(spec.plateNumber())) {
@@ -211,7 +211,8 @@ public class DevDataLoader implements ApplicationRunner {
                 StationSpec station = stations.get(stationIndex);
                 double maxLiters = Math.min(65.0, toDouble(vehicle.getTankCapacityLiters()) * 0.92);
                 double liters = randomBetween(random, 30.0, maxLiters);
-                boolean isDiesel = "Diesel".equalsIgnoreCase(vehicle.getFuelType());
+                boolean isDiesel = "DIESEL".equalsIgnoreCase(vehicle.getFuelType())
+                        || "DIESEL_PLUS".equalsIgnoreCase(vehicle.getFuelType());
                 double price = isDiesel
                         ? randomBetween(random, 62.0, 72.0)
                         : randomBetween(random, 68.0, 78.0);

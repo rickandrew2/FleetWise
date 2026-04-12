@@ -132,6 +132,41 @@ export interface FuelLogStatsResponse {
   averageLitersPerLog: number | null
 }
 
+export type FuelPriceType = 'DIESEL' | 'GASOLINE_91' | 'GASOLINE_95' | 'DIESEL_PLUS'
+
+export interface FuelPriceCurrentResponse {
+  fuelType: FuelPriceType
+  pricePerLiter: number
+  effectiveDate: string
+  source: string
+  stale: boolean
+}
+
+export interface FuelPriceHistoryPointResponse {
+  fuelType: FuelPriceType
+  effectiveDate: string
+  averagePricePerLiter: number
+}
+
+export interface FuelPriceManualEntryRequest {
+  fuelType: FuelPriceType
+  pricePerLiter: number
+  brand?: string | null
+}
+
+export interface FuelPriceManualUpdateRequest {
+  effectiveDate: string
+  source: string
+  entries: FuelPriceManualEntryRequest[]
+}
+
+export interface FuelPriceUpdateResultResponse {
+  updatedRecords: number
+  effectiveDate: string | null
+  fallbackUsed: boolean
+  message: string
+}
+
 export interface RouteLogResponse {
   id: string
   vehicleId: string

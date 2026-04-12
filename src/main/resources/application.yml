@@ -34,6 +34,15 @@ graphhopper:
     key: ${GRAPHHOPPER_API_KEY:}
     vehicle: ${GRAPHHOPPER_VEHICLE:car}
 
+fuel-prices:
+  source:
+    url: ${FUEL_PRICE_SOURCE_URL:https://fuelprice.ph}
+  scheduler:
+    enabled: ${FUEL_PRICE_SCHEDULER_ENABLED:true}
+    cron: ${FUEL_PRICE_SCHEDULER_CRON:0 0 8 * * TUE}
+    zone: ${FUEL_PRICE_SCHEDULER_ZONE:Asia/Manila}
+  stale-after-days: ${FUEL_PRICE_STALE_AFTER_DAYS:8}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

@@ -1,11 +1,13 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { RefreshCcw, TrendingUp, Wallet, TriangleAlert, CircleGauge } from 'lucide-react'
 import {
   dashboardCostTrendRequest,
   dashboardSummaryRequest,
   dashboardTopDriversRequest,
+  fuelPriceHistoryRequest,
+  fuelPricesCurrentRequest,
   parseApiError,
 } from '@/lib/api'
 import { formatPhpCurrency } from '@/lib/currency'
@@ -35,16 +37,65 @@ export function DashboardPage() {
     queryFn: dashboardCostTrendRequest,
   })
 
-  const hasError = summaryQuery.error || topDriversQuery.error || costTrendQuery.error
-  const isLoading = summaryQuery.isLoading || topDriversQuery.isLoading || costTrendQuery.isLoading
+  const fuelPricesQuery = useQuery({
+    queryKey: ['fuel-prices', 'current'],
+    queryFn: fuelPricesCurrentRequest,
+  })
+
+  const fuelPriceHistoryQuery = useQuery({
+    queryKey: ['fuel-prices', 'history'],
+    queryFn: fuelPriceHistoryRequest,
+  })
+
+  const hasError = summaryQuery.error || topDriversQuery.error || costTrendQuery.error || fuelPricesQuery.error || fuelPriceHistoryQuery.error
+  const isLoading = summaryQuery.isLoading || topDriversQuery.isLoading || costTrendQuery.isLoading || fuelPricesQuery.isLoading || fuelPriceHistoryQuery.isLoading
 
   const trendData = useMemo(
     () => (costTrendQuery.data ?? []).map((point) => ({ ...point, label: formatMonthLabel(point.month) })),
     [costTrendQuery.data],
   )
 
+  const currentFuelPrices = useMemo(() => {
+    const byType = new Map((fuelPricesQuery.data ?? []).map((entry) => [entry.fuelType, entry]))
+    return {
+      diesel: byType.get('DIESEL'),
+      gasoline91: byType.get('GASOLINE_91'),
+      gasoline95: byType.get('GASOLINE_95'),
+    }
+  }, [fuelPricesQuery.data])
+
+  const fuelTrendData = useMemo(() => {
+    const grouped = new Map<string, { label: string; diesel?: number; gasoline91?: number }>()
+
+    for (const point of fuelPriceHistoryQuery.data ?? []) {
+      if (point.fuelType !== 'DIESEL' && point.fuelType !== 'GASOLINE_91') {
+        continue
+      }
+      const key = point.effectiveDate
+      const current = grouped.get(key) ?? { label: key.slice(5) }
+      if (point.fuelType === 'DIESEL') {
+        current.diesel = point.averagePricePerLiter
+      }
+      if (point.fuelType === 'GASOLINE_91') {
+        current.gasoline91 = point.averagePricePerLiter
+      }
+      grouped.set(key, current)
+    }
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-8)
+      .map((entry) => entry[1])
+  }, [fuelPriceHistoryQuery.data])
+
   const refetchAll = async () => {
-    await Promise.all([summaryQuery.refetch(), topDriversQuery.refetch(), costTrendQuery.refetch()])
+    await Promise.all([
+      summaryQuery.refetch(),
+      topDriversQuery.refetch(),
+      costTrendQuery.refetch(),
+      fuelPricesQuery.refetch(),
+      fuelPriceHistoryQuery.refetch(),
+    ])
   }
 
   if (isLoading) {
@@ -79,7 +130,7 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Month-to-Date Fuel Cost</CardDescription>
@@ -120,7 +171,50 @@ export function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Current PH Fuel Prices</CardDescription>
+            <CardTitle className="text-lg">DOE weekly advisory</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            <p>Diesel: {currentFuelPrices.diesel ? `${formatPhpCurrency(currentFuelPrices.diesel.pricePerLiter)}/L` : 'N/A'}</p>
+            <p>Gasoline 91: {currentFuelPrices.gasoline91 ? `${formatPhpCurrency(currentFuelPrices.gasoline91.pricePerLiter)}/L` : 'N/A'}</p>
+            <p>Gasoline 95: {currentFuelPrices.gasoline95 ? `${formatPhpCurrency(currentFuelPrices.gasoline95.pricePerLiter)}/L` : 'N/A'}</p>
+            <p className="pt-1 text-xs text-muted-foreground">
+              Effective {currentFuelPrices.diesel?.effectiveDate ?? currentFuelPrices.gasoline91?.effectiveDate ?? 'N/A'}
+            </p>
+            {(currentFuelPrices.diesel?.stale || currentFuelPrices.gasoline91?.stale || currentFuelPrices.gasoline95?.stale) ? (
+              <p className="text-xs text-amber-700">Using last successful update. Data may be stale.</p>
+            ) : null}
+          </CardContent>
+        </Card>
       </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Fuel Price Trend (Last 8 Weeks)</CardTitle>
+          <CardDescription>Diesel and Gasoline 91 weekly movement.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-44">
+          {fuelTrendData.length === 0 ? (
+            <PageEmptyState
+              title="No fuel trend data"
+              description="Trend lines will appear after weekly fuel prices are captured."
+            />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={fuelTrendData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis dataKey="label" tickMargin={8} />
+                <Tooltip formatter={(value) => `${formatPhpCurrency(Number(value ?? 0))}/L`} />
+                <Line type="monotone" dataKey="diesel" name="Diesel" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} />
+                <Line type="monotone" dataKey="gasoline91" name="Gasoline 91" stroke="hsl(var(--accent))" strokeWidth={2.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Card>

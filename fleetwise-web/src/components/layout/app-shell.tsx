@@ -1,4 +1,5 @@
-import { Activity, Car, Fuel, LayoutDashboard, MapPinned, Siren, FileStack } from 'lucide-react'
+import { useState } from 'react'
+import { Activity, Car, Fuel, LayoutDashboard, MapPinned, Siren, FileStack, Menu, X } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ const navItems = [
 
 export function AppShell() {
   const { user, logout } = useAuth()
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const visibleNavItems = navItems.filter((item) => hasRoleAccess(user?.role, item.allowedRoles))
 
   return (
@@ -34,6 +36,15 @@ export function AppShell() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="icon"
+              className="min-h-11 min-w-11 sm:hidden"
+              onClick={() => setIsMobileNavOpen((previous) => !previous)}
+              aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            >
+              {isMobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </Button>
             <Badge variant="secondary" className="hidden sm:inline-flex">{user?.role}</Badge>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold">{user?.email}</p>
@@ -46,9 +57,54 @@ export function AppShell() {
         </div>
       </header>
 
+      {isMobileNavOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 sm:hidden"
+          onClick={() => setIsMobileNavOpen(false)}
+          aria-hidden="true"
+        >
+          <aside
+            className="h-full w-72 max-w-[85vw] border-r border-border/70 bg-background p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm font-semibold">Navigation</p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="min-h-11 min-w-11"
+                onClick={() => setIsMobileNavOpen(false)}
+                aria-label="Close navigation drawer"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <nav className="flex flex-col gap-2">
+              {visibleNavItems.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      'inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                      isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary',
+                    )
+                  }
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+          </aside>
+        </div>
+      ) : null}
+
       <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:grid-cols-[220px_1fr] sm:px-6">
-        <aside className="surface-panel h-fit p-3">
-          <nav className="flex gap-2 overflow-x-auto pb-1 sm:flex-col">
+        <aside className="surface-panel hidden h-fit p-3 sm:block">
+          <nav className="flex flex-col gap-2">
             {visibleNavItems.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}

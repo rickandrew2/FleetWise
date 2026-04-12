@@ -17,5 +17,17 @@ services:
       timeout: 5s
       retries: 10
 
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: fleetwise-cloudbeaver
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8978:8978"
+    volumes:
+      - fleetwise_cloudbeaver_data:/opt/cloudbeaver/workspace
+
 volumes:
   fleetwise_postgres_data:
+  fleetwise_cloudbeaver_data:

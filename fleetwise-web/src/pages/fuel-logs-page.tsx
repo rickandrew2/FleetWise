@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Filter, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowUpDown, Filter, Plus, Save, Trash2, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import {
   createFuelLogRequest,
   deleteFuelLogRequest,
+  fuelPriceCurrentByTypeRequest,
   fuelLogsListRequest,
   fuelLogStatsRequest,
   parseApiError,
@@ -77,6 +78,10 @@ const initialFilters: LogQueryFilters = {
   endDate: '',
 }
 
+type FuelLogSortField = 'logDate' | 'litersFilled' | 'totalCost' | 'odometerReadingKm'
+type SortDirection = 'asc' | 'desc'
+const EMPTY_FUEL_LOGS: FuelLogResponse[] = []
+
 function toFuelLogPayload(values: FuelLogFormValues): FuelLogUpsertRequest {
   return {
     vehicleId: values.vehicleId,
@@ -111,6 +116,11 @@ export function FuelLogsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [draftFilters, setDraftFilters] = useState<LogQueryFilters>(initialFilters)
   const [appliedFilters, setAppliedFilters] = useState<LogQueryFilters>(initialFilters)
+  const [sortField, setSortField] = useState<FuelLogSortField>('logDate')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [pageSize, setPageSize] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [autoFilledFuelType, setAutoFilledFuelType] = useState<string | null>(null)
 
   const vehiclesQuery = useQuery({
     queryKey: ['vehicles'],
@@ -142,10 +152,26 @@ export function FuelLogsPage() {
     handleSubmit,
     reset,
     setError,
+    setValue,
+    getValues,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FuelLogFormValues>({
     resolver: zodResolver(fuelLogFormSchema),
     defaultValues: initialFuelLogFormValues,
+  })
+
+  const selectedVehicleId = watch('vehicleId')
+
+  const selectedVehicleFuelType = useMemo(() => {
+    const selectedVehicle = vehiclesQuery.data?.find((vehicle) => vehicle.id === selectedVehicleId)
+    return selectedVehicle?.fuelType?.toUpperCase() ?? null
+  }, [selectedVehicleId, vehiclesQuery.data])
+
+  const selectedFuelPriceQuery = useQuery({
+    queryKey: ['fuel-prices', 'current', selectedVehicleFuelType],
+    queryFn: () => fuelPriceCurrentByTypeRequest(selectedVehicleFuelType || ''),
+    enabled: Boolean(isCreateOpen && selectedVehicleFuelType),
   })
 
   const createMutation = useMutation({
@@ -185,6 +211,85 @@ export function FuelLogsPage() {
     return new Map(data.map((vehicle) => [vehicle.id, `${vehicle.plateNumber} • ${vehicle.make} ${vehicle.model}`]))
   }, [vehiclesQuery.data])
 
+  const vehicles = vehiclesQuery.data ?? []
+  const availableDrivers: UserSummaryResponse[] = canBrowseUsers
+    ? (usersQuery.data && usersQuery.data.length > 0
+      ? usersQuery.data
+      : user
+        ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+        : [])
+    : user
+      ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+      : []
+  const fuelLogs = fuelLogsQuery.data ?? EMPTY_FUEL_LOGS
+  const stats = fuelLogStatsQuery.data
+  const canDelete = user?.role === 'ADMIN'
+
+  const usersLookupErrorMessage = usersLookupError
+    ? parseApiError(usersLookupError).message || 'Unable to load driver list for filtering.'
+    : null
+
+  useEffect(() => {
+    if (!isCreateOpen || !selectedFuelPriceQuery.data || !selectedVehicleFuelType) {
+      return
+    }
+
+    if (autoFilledFuelType === selectedVehicleFuelType) {
+      return
+    }
+
+    const currentValue = getValues('pricePerLiter')
+    if (currentValue && Number(currentValue) > 0) {
+      return
+    }
+
+    setValue('pricePerLiter', selectedFuelPriceQuery.data.pricePerLiter.toFixed(2), {
+      shouldValidate: true,
+      shouldDirty: false,
+      shouldTouch: true,
+    })
+    setAutoFilledFuelType(selectedVehicleFuelType)
+  }, [
+    autoFilledFuelType,
+    getValues,
+    isCreateOpen,
+    selectedFuelPriceQuery.data,
+    selectedVehicleFuelType,
+    setValue,
+  ])
+
+  const sortedFuelLogs = useMemo(() => {
+    const data = [...fuelLogs]
+
+    data.sort((a, b) => {
+      const leftValue =
+        sortField === 'odometerReadingKm' ? (a.odometerReadingKm ?? Number.NEGATIVE_INFINITY) : a[sortField]
+      const rightValue =
+        sortField === 'odometerReadingKm' ? (b.odometerReadingKm ?? Number.NEGATIVE_INFINITY) : b[sortField]
+
+      if (leftValue < rightValue) {
+        return sortDirection === 'asc' ? -1 : 1
+      }
+
+      if (leftValue > rightValue) {
+        return sortDirection === 'asc' ? 1 : -1
+      }
+
+      return 0
+    })
+
+    return data
+  }, [fuelLogs, sortDirection, sortField])
+
+  const totalRows = sortedFuelLogs.length
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize))
+  const normalizedCurrentPage = Math.min(currentPage, totalPages)
+
+  const pageStartIndex = (normalizedCurrentPage - 1) * pageSize
+  const paginatedFuelLogs = sortedFuelLogs.slice(pageStartIndex, pageStartIndex + pageSize)
+  const rangeStart = totalRows === 0 ? 0 : pageStartIndex + 1
+  const rangeEnd = Math.min(totalRows, pageStartIndex + paginatedFuelLogs.length)
+
   const isLoading = vehiclesQuery.isLoading || fuelLogsQuery.isLoading || fuelLogStatsQuery.isLoading || (canBrowseUsers && usersQuery.isLoading)
 
   if (isLoading) {
@@ -207,24 +312,6 @@ export function FuelLogsPage() {
     )
   }
 
-  const usersLookupErrorMessage = usersLookupError
-    ? parseApiError(usersLookupError).message || 'Unable to load driver list for filtering.'
-    : null
-
-  const vehicles = vehiclesQuery.data ?? []
-  const availableDrivers: UserSummaryResponse[] = canBrowseUsers
-    ? (usersQuery.data && usersQuery.data.length > 0
-      ? usersQuery.data
-      : user
-        ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
-        : [])
-    : user
-      ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
-      : []
-  const fuelLogs = fuelLogsQuery.data || []
-  const stats = fuelLogStatsQuery.data
-  const canDelete = user?.role === 'ADMIN'
-
   function mapFieldErrors(fieldErrors?: Record<string, string>) {
     if (!fieldErrors) {
       return
@@ -239,6 +326,7 @@ export function FuelLogsPage() {
 
   function closeCreateForm() {
     setIsCreateOpen(false)
+    setAutoFilledFuelType(null)
     reset(initialFuelLogFormValues)
   }
 
@@ -259,11 +347,32 @@ export function FuelLogsPage() {
     }
 
     setAppliedFilters({ ...draftFilters })
+    setCurrentPage(1)
   }
 
   function resetFilters() {
     setDraftFilters(initialFilters)
     setAppliedFilters(initialFilters)
+    setCurrentPage(1)
+  }
+
+  function toggleSort(field: FuelLogSortField) {
+    if (sortField === field) {
+      setSortDirection((previous) => (previous === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+
+    setSortField(field)
+    setSortDirection('desc')
+    setCurrentPage(1)
+  }
+
+  function getSortLabel(field: FuelLogSortField) {
+    if (sortField !== field) {
+      return 'Not sorted'
+    }
+
+    return sortDirection === 'asc' ? 'Sorted ascending' : 'Sorted descending'
   }
 
   const onSubmit = handleSubmit(async (values) => {
@@ -402,22 +511,89 @@ export function FuelLogsPage() {
               }
             />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/80">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Showing {rangeStart}-{rangeEnd} of {totalRows} logs
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="fuel-logs-page-size" className="text-xs text-muted-foreground">
+                    Rows per page
+                  </Label>
+                  <select
+                    id="fuel-logs-page-size"
+                    className="flex h-9 rounded-md border border-input bg-background px-2 py-1 text-sm"
+                    value={pageSize}
+                    onChange={(event) => {
+                      const nextSize = Number(event.target.value)
+                      setPageSize(nextSize)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-border/80">
               <table className="min-w-full text-sm">
                 <thead className="bg-secondary/40 text-left">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">Date</th>
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort('logDate')}
+                        aria-label={`Sort by date. ${getSortLabel('logDate')}`}
+                      >
+                        Date
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </th>
                     <th className="px-4 py-3 font-semibold">Vehicle</th>
                     <th className="px-4 py-3 font-semibold">Driver</th>
-                    <th className="px-4 py-3 font-semibold">Liters</th>
-                    <th className="px-4 py-3 font-semibold">Total Cost</th>
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort('litersFilled')}
+                        aria-label={`Sort by liters. ${getSortLabel('litersFilled')}`}
+                      >
+                        Liters
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort('totalCost')}
+                        aria-label={`Sort by total cost. ${getSortLabel('totalCost')}`}
+                      >
+                        Total Cost
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </th>
                     <th className="px-4 py-3 font-semibold">Station</th>
-                    <th className="px-4 py-3 font-semibold">Odometer</th>
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort('odometerReadingKm')}
+                        aria-label={`Sort by odometer. ${getSortLabel('odometerReadingKm')}`}
+                      >
+                        Odometer
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </th>
                     <th className="px-4 py-3 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {fuelLogs.map((log: FuelLogResponse) => (
+                  {paginatedFuelLogs.map((log: FuelLogResponse) => (
                     <tr key={log.id} className="border-t border-border/80">
                       <td className="px-4 py-3">{log.logDate}</td>
                       <td className="px-4 py-3">{vehicleLabelById.get(log.vehicleId) || shortId(log.vehicleId)}</td>
@@ -449,6 +625,31 @@ export function FuelLogsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={normalizedCurrentPage <= 1}
+                  onClick={() => setCurrentPage(Math.max(1, normalizedCurrentPage - 1))}
+                >
+                  Previous
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Page {normalizedCurrentPage} of {totalPages}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={normalizedCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage(Math.min(totalPages, normalizedCurrentPage + 1))}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -499,6 +700,15 @@ export function FuelLogsPage() {
                 <Label htmlFor="pricePerLiter">Price Per Liter</Label>
                 <Input id="pricePerLiter" type="number" inputMode="decimal" step="0.01" {...register('pricePerLiter')} />
                 {errors.pricePerLiter ? <p className="text-sm text-destructive">{errors.pricePerLiter.message}</p> : null}
+                {selectedFuelPriceQuery.data ? (
+                  <p className="text-xs text-muted-foreground">Auto-filled from DOE weekly advisory - verify before saving.</p>
+                ) : null}
+                {selectedFuelPriceQuery.data?.stale ? (
+                  <p className="text-xs text-amber-700">Using last successful update. Data may be stale.</p>
+                ) : null}
+                {selectedFuelPriceQuery.error ? (
+                  <p className="text-xs text-muted-foreground">Unable to auto-fill current fuel price for this vehicle type.</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">

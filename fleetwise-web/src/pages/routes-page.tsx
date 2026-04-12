@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Filter, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowUpDown, Filter, Plus, Save, Trash2, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import {
@@ -78,6 +78,10 @@ const initialFilters: LogQueryFilters = {
   endDate: '',
 }
 
+type RouteSortField = 'tripDate' | 'distanceKm' | 'efficiencyScore'
+type SortDirection = 'asc' | 'desc'
+const EMPTY_ROUTES: RouteLogResponse[] = []
+
 function toRoutePayload(values: RouteLogFormValues): RouteLogUpsertRequest {
   return {
     vehicleId: values.vehicleId,
@@ -112,6 +116,10 @@ export function RoutesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [draftFilters, setDraftFilters] = useState<LogQueryFilters>(initialFilters)
   const [appliedFilters, setAppliedFilters] = useState<LogQueryFilters>(initialFilters)
+  const [sortField, setSortField] = useState<RouteSortField>('tripDate')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [pageSize, setPageSize] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const vehiclesQuery = useQuery({
     queryKey: ['vehicles'],
@@ -186,6 +194,65 @@ export function RoutesPage() {
     return new Map(data.map((vehicle) => [vehicle.id, `${vehicle.plateNumber} • ${vehicle.make} ${vehicle.model}`]))
   }, [vehiclesQuery.data])
 
+  const vehicles = vehiclesQuery.data ?? []
+  const availableDrivers: UserSummaryResponse[] = canBrowseUsers
+    ? (usersQuery.data && usersQuery.data.length > 0
+      ? usersQuery.data
+      : user
+        ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+        : [])
+    : user
+      ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
+      : []
+  const routes = routesQuery.data ?? EMPTY_ROUTES
+  const stats = routeStatsQuery.data
+  const canDelete = user?.role === 'ADMIN'
+
+  const usersLookupErrorMessage = usersLookupError
+    ? parseApiError(usersLookupError).message || 'Unable to load driver list for filtering.'
+    : null
+
+  const sortedRoutes = useMemo(() => {
+    const data = [...routes]
+
+    data.sort((a, b) => {
+      const leftValue =
+        sortField === 'tripDate'
+          ? a.tripDate
+          : sortField === 'distanceKm'
+            ? (a.distanceKm ?? Number.NEGATIVE_INFINITY)
+            : (a.efficiencyScore ?? Number.NEGATIVE_INFINITY)
+
+      const rightValue =
+        sortField === 'tripDate'
+          ? b.tripDate
+          : sortField === 'distanceKm'
+            ? (b.distanceKm ?? Number.NEGATIVE_INFINITY)
+            : (b.efficiencyScore ?? Number.NEGATIVE_INFINITY)
+
+      if (leftValue < rightValue) {
+        return sortDirection === 'asc' ? -1 : 1
+      }
+
+      if (leftValue > rightValue) {
+        return sortDirection === 'asc' ? 1 : -1
+      }
+
+      return 0
+    })
+
+    return data
+  }, [routes, sortDirection, sortField])
+
+  const totalRows = sortedRoutes.length
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize))
+  const normalizedCurrentPage = Math.min(currentPage, totalPages)
+
+  const pageStartIndex = (normalizedCurrentPage - 1) * pageSize
+  const paginatedRoutes = sortedRoutes.slice(pageStartIndex, pageStartIndex + pageSize)
+  const rangeStart = totalRows === 0 ? 0 : pageStartIndex + 1
+  const rangeEnd = Math.min(totalRows, pageStartIndex + paginatedRoutes.length)
+
   const isLoading = vehiclesQuery.isLoading || routesQuery.isLoading || routeStatsQuery.isLoading || (canBrowseUsers && usersQuery.isLoading)
 
   if (isLoading) {
@@ -207,24 +274,6 @@ export function RoutesPage() {
       />
     )
   }
-
-  const usersLookupErrorMessage = usersLookupError
-    ? parseApiError(usersLookupError).message || 'Unable to load driver list for filtering.'
-    : null
-
-  const vehicles = vehiclesQuery.data ?? []
-  const availableDrivers: UserSummaryResponse[] = canBrowseUsers
-    ? (usersQuery.data && usersQuery.data.length > 0
-      ? usersQuery.data
-      : user
-        ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
-        : [])
-    : user
-      ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
-      : []
-  const routes = routesQuery.data || []
-  const stats = routeStatsQuery.data
-  const canDelete = user?.role === 'ADMIN'
 
   function mapFieldErrors(fieldErrors?: Record<string, string>) {
     if (!fieldErrors) {
@@ -260,11 +309,32 @@ export function RoutesPage() {
     }
 
     setAppliedFilters({ ...draftFilters })
+    setCurrentPage(1)
   }
 
   function resetFilters() {
     setDraftFilters(initialFilters)
     setAppliedFilters(initialFilters)
+    setCurrentPage(1)
+  }
+
+  function toggleSort(field: RouteSortField) {
+    if (sortField === field) {
+      setSortDirection((previous) => (previous === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+
+    setSortField(field)
+    setSortDirection('desc')
+    setCurrentPage(1)
+  }
+
+  function getSortLabel(field: RouteSortField) {
+    if (sortField !== field) {
+      return 'Not sorted'
+    }
+
+    return sortDirection === 'asc' ? 'Sorted ascending' : 'Sorted descending'
   }
 
   const onSubmit = handleSubmit(async (values) => {
@@ -403,22 +473,79 @@ export function RoutesPage() {
               }
             />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/80">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Showing {rangeStart}-{rangeEnd} of {totalRows} routes
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="routes-page-size" className="text-xs text-muted-foreground">
+                    Rows per page
+                  </Label>
+                  <select
+                    id="routes-page-size"
+                    className="flex h-9 rounded-md border border-input bg-background px-2 py-1 text-sm"
+                    value={pageSize}
+                    onChange={(event) => {
+                      const nextSize = Number(event.target.value)
+                      setPageSize(nextSize)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-border/80">
               <table className="min-w-full text-sm">
                 <thead className="bg-secondary/40 text-left">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">Date</th>
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort('tripDate')}
+                        aria-label={`Sort by date. ${getSortLabel('tripDate')}`}
+                      >
+                        Date
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </th>
                     <th className="px-4 py-3 font-semibold">Vehicle</th>
                     <th className="px-4 py-3 font-semibold">Driver</th>
                     <th className="px-4 py-3 font-semibold">Origin</th>
                     <th className="px-4 py-3 font-semibold">Destination</th>
-                    <th className="px-4 py-3 font-semibold">Distance</th>
-                    <th className="px-4 py-3 font-semibold">Efficiency</th>
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort('distanceKm')}
+                        aria-label={`Sort by distance. ${getSortLabel('distanceKm')}`}
+                      >
+                        Distance
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort('efficiencyScore')}
+                        aria-label={`Sort by efficiency. ${getSortLabel('efficiencyScore')}`}
+                      >
+                        Efficiency
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </th>
                     <th className="px-4 py-3 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {routes.map((route: RouteLogResponse) => (
+                  {paginatedRoutes.map((route: RouteLogResponse) => (
                     <tr key={route.id} className="border-t border-border/80">
                       <td className="px-4 py-3">{route.tripDate}</td>
                       <td className="px-4 py-3">{vehicleLabelById.get(route.vehicleId) || shortId(route.vehicleId)}</td>
@@ -450,6 +577,31 @@ export function RoutesPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={normalizedCurrentPage <= 1}
+                  onClick={() => setCurrentPage(Math.max(1, normalizedCurrentPage - 1))}
+                >
+                  Previous
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Page {normalizedCurrentPage} of {totalPages}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={normalizedCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage(Math.min(totalPages, normalizedCurrentPage + 1))}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
