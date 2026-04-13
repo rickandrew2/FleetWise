@@ -6,6 +6,8 @@ import { FuelLogsPage } from '@/pages/fuel-logs-page'
 import {
   createFuelLogRequest,
   deleteFuelLogRequest,
+  fuelPriceCurrentByTypeRequest,
+  fuelPriceHistoryRequest,
   fuelLogsListRequest,
   fuelLogStatsRequest,
   parseApiError,
@@ -31,6 +33,8 @@ vi.mock('@/lib/api', async () => {
     vehiclesListRequest: vi.fn(),
     fuelLogsListRequest: vi.fn(),
     fuelLogStatsRequest: vi.fn(),
+    fuelPriceCurrentByTypeRequest: vi.fn(),
+    fuelPriceHistoryRequest: vi.fn(),
     createFuelLogRequest: vi.fn(),
     deleteFuelLogRequest: vi.fn(),
     parseApiError: vi.fn(),
@@ -42,6 +46,8 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedVehiclesList = vi.mocked(vehiclesListRequest)
 const mockedFuelLogsList = vi.mocked(fuelLogsListRequest)
 const mockedFuelLogStats = vi.mocked(fuelLogStatsRequest)
+const mockedFuelPriceCurrentByType = vi.mocked(fuelPriceCurrentByTypeRequest)
+const mockedFuelPriceHistory = vi.mocked(fuelPriceHistoryRequest)
 const mockedCreateFuelLog = vi.mocked(createFuelLogRequest)
 const mockedDeleteFuelLog = vi.mocked(deleteFuelLogRequest)
 const mockedParseApiError = vi.mocked(parseApiError)
@@ -87,7 +93,7 @@ describe('FuelLogsPage', () => {
         make: 'Toyota',
         model: 'Corolla',
         year: 2022,
-        fuelType: 'Petrol',
+        fuelType: 'DIESEL',
         tankCapacityLiters: 50,
         epaVehicleId: null,
         combinedMpg: null,
@@ -111,6 +117,14 @@ describe('FuelLogsPage', () => {
       totalCost: 0,
       averageLitersPerLog: null,
     })
+    mockedFuelPriceCurrentByType.mockResolvedValue({
+      fuelType: 'DIESEL',
+      pricePerLiter: 70,
+      effectiveDate: '2026-04-08',
+      source: 'DOE Weekly Advisory',
+      stale: false,
+    })
+    mockedFuelPriceHistory.mockResolvedValue([])
     mockedCreateFuelLog.mockResolvedValue({
       id: '550e8400-e29b-41d4-a716-446655440010',
       vehicleId: '550e8400-e29b-41d4-a716-446655440001',

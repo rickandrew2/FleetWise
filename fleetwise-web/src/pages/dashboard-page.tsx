@@ -6,9 +6,11 @@ import {
   dashboardCostTrendRequest,
   dashboardSummaryRequest,
   dashboardTopDriversRequest,
+  fuelLogsListRequest,
   fuelPriceHistoryRequest,
   fuelPricesCurrentRequest,
   parseApiError,
+  vehiclesListRequest,
 } from '@/lib/api'
 import { formatPhpCurrency } from '@/lib/currency'
 import { Button } from '@/components/ui/button'
@@ -19,6 +21,25 @@ function formatMonthLabel(month: string) {
   const [year, monthNumber] = month.split('-')
   const date = new Date(Number(year), Number(monthNumber) - 1, 1)
   return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+}
+
+function normalizeFuelType(rawFuelType: string | null | undefined) {
+  const normalized = rawFuelType?.trim().toUpperCase()
+  switch (normalized) {
+    case 'DIESEL':
+    case 'DIESEL_PLUS':
+      return 'DIESEL' as const
+    case 'GASOLINE_91':
+    case 'GASOLINE':
+    case 'UNLEADED':
+    case 'REGULAR':
+      return 'GASOLINE_91' as const
+    case 'GASOLINE_95':
+    case 'PREMIUM':
+      return 'GASOLINE_95' as const
+    default:
+      return null
+  }
 }
 
 export function DashboardPage() {
@@ -47,8 +68,21 @@ export function DashboardPage() {
     queryFn: fuelPriceHistoryRequest,
   })
 
-  const hasError = summaryQuery.error || topDriversQuery.error || costTrendQuery.error || fuelPricesQuery.error || fuelPriceHistoryQuery.error
-  const isLoading = summaryQuery.isLoading || topDriversQuery.isLoading || costTrendQuery.isLoading || fuelPricesQuery.isLoading || fuelPriceHistoryQuery.isLoading
+  const hasBlockingError = summaryQuery.error || topDriversQuery.error || costTrendQuery.error
+  const hasFuelPriceError = Boolean(fuelPricesQuery.error || fuelPriceHistoryQuery.error)
+
+  const fallbackVehiclesQuery = useQuery({
+    queryKey: ['dashboard', 'fallback', 'vehicles'],
+    queryFn: vehiclesListRequest,
+    enabled: hasFuelPriceError,
+  })
+
+  const fallbackFuelLogsQuery = useQuery({
+    queryKey: ['dashboard', 'fallback', 'fuel-logs'],
+    queryFn: () => fuelLogsListRequest(),
+    enabled: hasFuelPriceError,
+  })
+  const isLoading = summaryQuery.isLoading || topDriversQuery.isLoading || costTrendQuery.isLoading
 
   const trendData = useMemo(
     () => (costTrendQuery.data ?? []).map((point) => ({ ...point, label: formatMonthLabel(point.month) })),
@@ -57,12 +91,73 @@ export function DashboardPage() {
 
   const currentFuelPrices = useMemo(() => {
     const byType = new Map((fuelPricesQuery.data ?? []).map((entry) => [entry.fuelType, entry]))
-    return {
-      diesel: byType.get('DIESEL'),
-      gasoline91: byType.get('GASOLINE_91'),
-      gasoline95: byType.get('GASOLINE_95'),
+
+    if (byType.size > 0) {
+      return {
+        diesel: byType.get('DIESEL'),
+        gasoline91: byType.get('GASOLINE_91'),
+        gasoline95: byType.get('GASOLINE_95'),
+        sourceLabel: 'DOE weekly advisory',
+      }
     }
-  }, [fuelPricesQuery.data])
+
+    const vehicles = fallbackVehiclesQuery.data ?? []
+    const logs = fallbackFuelLogsQuery.data ?? []
+
+    if (vehicles.length === 0 || logs.length === 0) {
+      return {
+        diesel: undefined,
+        gasoline91: undefined,
+        gasoline95: undefined,
+        sourceLabel: 'Recent fill-up fallback',
+      }
+    }
+
+    const fuelTypeByVehicleId = new Map(vehicles.map((vehicle) => [vehicle.id, normalizeFuelType(vehicle.fuelType)]))
+    const grouped = new Map<string, { total: number; count: number; latestDate: string }>()
+
+    for (const log of logs) {
+      const mappedFuelType = fuelTypeByVehicleId.get(log.vehicleId)
+      if (!mappedFuelType) {
+        continue
+      }
+
+      const current = grouped.get(mappedFuelType) ?? {
+        total: 0,
+        count: 0,
+        latestDate: log.logDate,
+      }
+
+      current.total += log.pricePerLiter
+      current.count += 1
+      if (log.logDate > current.latestDate) {
+        current.latestDate = log.logDate
+      }
+
+      grouped.set(mappedFuelType, current)
+    }
+
+    const buildFallbackEntry = (fuelType: 'DIESEL' | 'GASOLINE_91' | 'GASOLINE_95') => {
+      const item = grouped.get(fuelType)
+      if (!item || item.count === 0) {
+        return undefined
+      }
+      return {
+        fuelType,
+        pricePerLiter: Number((item.total / item.count).toFixed(2)),
+        effectiveDate: item.latestDate,
+        source: 'Recent fill-up fallback',
+        stale: true,
+      }
+    }
+
+    return {
+      diesel: buildFallbackEntry('DIESEL'),
+      gasoline91: buildFallbackEntry('GASOLINE_91'),
+      gasoline95: buildFallbackEntry('GASOLINE_95'),
+      sourceLabel: 'Estimated from recent fill-up logs',
+    }
+  }, [fallbackFuelLogsQuery.data, fallbackVehiclesQuery.data, fuelPricesQuery.data])
 
   const fuelTrendData = useMemo(() => {
     const grouped = new Map<string, { label: string; diesel?: number; gasoline91?: number }>()
@@ -102,8 +197,8 @@ export function DashboardPage() {
     return <PageLoadingState />
   }
 
-  if (hasError) {
-    const parsed = parseApiError(hasError)
+  if (hasBlockingError) {
+    const parsed = parseApiError(hasBlockingError)
     return (
       <PageErrorState
         title="Unable to load dashboard"
@@ -175,9 +270,12 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Current PH Fuel Prices</CardDescription>
-            <CardTitle className="text-lg">DOE weekly advisory</CardTitle>
+            <CardTitle className="text-lg">{currentFuelPrices.sourceLabel}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm">
+            {hasFuelPriceError ? (
+              <p className="text-xs text-muted-foreground">Fuel price feed is temporarily unavailable. Showing fallback values when available.</p>
+            ) : null}
             <p>Diesel: {currentFuelPrices.diesel ? `${formatPhpCurrency(currentFuelPrices.diesel.pricePerLiter)}/L` : 'N/A'}</p>
             <p>Gasoline 91: {currentFuelPrices.gasoline91 ? `${formatPhpCurrency(currentFuelPrices.gasoline91.pricePerLiter)}/L` : 'N/A'}</p>
             <p>Gasoline 95: {currentFuelPrices.gasoline95 ? `${formatPhpCurrency(currentFuelPrices.gasoline95.pricePerLiter)}/L` : 'N/A'}</p>
@@ -194,7 +292,11 @@ export function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Fuel Price Trend (Last 8 Weeks)</CardTitle>
-          <CardDescription>Diesel and Gasoline 91 weekly movement.</CardDescription>
+          <CardDescription>
+            {hasFuelPriceError
+              ? 'Fuel price history is temporarily unavailable.'
+              : 'Diesel and Gasoline 91 weekly movement.'}
+          </CardDescription>
         </CardHeader>
         <CardContent className="h-44">
           {fuelTrendData.length === 0 ? (

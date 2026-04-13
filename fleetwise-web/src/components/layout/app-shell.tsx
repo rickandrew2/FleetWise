@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Car, Fuel, LayoutDashboard, MapPinned, Siren, FileStack, Menu, X } from 'lucide-react'
+import { Activity, Car, Fuel, LayoutDashboard, MapPinned, Siren, FileStack, Menu, Settings, X } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ const navItems = [
   { to: '/routes', label: 'Routes', icon: MapPinned, allowedRoles: ACCESS_RULES.routes },
   { to: '/alerts', label: 'Alerts', icon: Siren, allowedRoles: ACCESS_RULES.alerts },
   { to: '/reports', label: 'Reports', icon: FileStack, allowedRoles: ACCESS_RULES.reports },
+  { to: '/settings', label: 'Settings', icon: Settings, allowedRoles: ACCESS_RULES.settings },
 ]
 
 export function AppShell() {
@@ -24,7 +25,7 @@ export function AppShell() {
   return (
     <div className="min-h-screen">
       <header className="border-b border-border/70 bg-white/75 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+        <div className="mx-auto flex w-full items-center justify-between px-4 py-4 sm:w-[90%] sm:px-0 lg:w-[80%]">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-primary/10 p-2 text-primary">
               <Activity className="h-5 w-5" />
@@ -102,7 +103,7 @@ export function AppShell() {
         </div>
       ) : null}
 
-      <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:grid-cols-[220px_1fr] sm:px-6">
+      <div className="mx-auto grid w-full gap-6 px-4 py-6 sm:w-[90%] sm:grid-cols-[220px_1fr] sm:px-0 lg:w-[80%]">
         <aside className="surface-panel hidden h-fit p-3 sm:block">
           <nav className="flex flex-col gap-2">
             {visibleNavItems.map(({ to, label, icon: Icon }) => (

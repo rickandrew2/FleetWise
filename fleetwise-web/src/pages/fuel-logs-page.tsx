@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpDown, Filter, Plus, Save, Trash2, X } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import { z } from 'zod'
 import {
   createFuelLogRequest,
   deleteFuelLogRequest,
   fuelPriceCurrentByTypeRequest,
+  fuelPriceHistoryRequest,
   fuelLogsListRequest,
   fuelLogStatsRequest,
   parseApiError,
@@ -120,7 +122,7 @@ export function FuelLogsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [autoFilledFuelType, setAutoFilledFuelType] = useState<string | null>(null)
+  const autoFilledFuelTypeRef = useRef<string | null>(null)
 
   const vehiclesQuery = useQuery({
     queryKey: ['vehicles'],
@@ -147,6 +149,11 @@ export function FuelLogsPage() {
     queryFn: () => fuelLogStatsRequest(appliedFilters),
   })
 
+  const fuelPriceHistoryQuery = useQuery({
+    queryKey: ['fuel-prices', 'history'],
+    queryFn: fuelPriceHistoryRequest,
+  })
+
   const {
     register,
     handleSubmit,
@@ -154,14 +161,17 @@ export function FuelLogsPage() {
     setError,
     setValue,
     getValues,
-    watch,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FuelLogFormValues>({
     resolver: zodResolver(fuelLogFormSchema),
     defaultValues: initialFuelLogFormValues,
   })
 
-  const selectedVehicleId = watch('vehicleId')
+  const selectedVehicleId = useWatch({
+    control,
+    name: 'vehicleId',
+  })
 
   const selectedVehicleFuelType = useMemo(() => {
     const selectedVehicle = vehiclesQuery.data?.find((vehicle) => vehicle.id === selectedVehicleId)
@@ -234,7 +244,7 @@ export function FuelLogsPage() {
       return
     }
 
-    if (autoFilledFuelType === selectedVehicleFuelType) {
+    if (autoFilledFuelTypeRef.current === selectedVehicleFuelType) {
       return
     }
 
@@ -248,9 +258,8 @@ export function FuelLogsPage() {
       shouldDirty: false,
       shouldTouch: true,
     })
-    setAutoFilledFuelType(selectedVehicleFuelType)
+    autoFilledFuelTypeRef.current = selectedVehicleFuelType
   }, [
-    autoFilledFuelType,
     getValues,
     isCreateOpen,
     selectedFuelPriceQuery.data,
@@ -280,6 +289,30 @@ export function FuelLogsPage() {
 
     return data
   }, [fuelLogs, sortDirection, sortField])
+
+  const fuelPriceTrendData = useMemo(() => {
+    const grouped = new Map<string, { label: string; diesel?: number; gasoline91?: number }>()
+
+    for (const point of fuelPriceHistoryQuery.data ?? []) {
+      if (point.fuelType !== 'DIESEL' && point.fuelType !== 'GASOLINE_91') {
+        continue
+      }
+      const key = point.effectiveDate
+      const current = grouped.get(key) ?? { label: key.slice(5) }
+      if (point.fuelType === 'DIESEL') {
+        current.diesel = point.averagePricePerLiter
+      }
+      if (point.fuelType === 'GASOLINE_91') {
+        current.gasoline91 = point.averagePricePerLiter
+      }
+      grouped.set(key, current)
+    }
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-8)
+      .map((entry) => entry[1])
+  }, [fuelPriceHistoryQuery.data])
 
   const totalRows = sortedFuelLogs.length
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize))
@@ -326,7 +359,7 @@ export function FuelLogsPage() {
 
   function closeCreateForm() {
     setIsCreateOpen(false)
-    setAutoFilledFuelType(null)
+    autoFilledFuelTypeRef.current = null
     reset(initialFuelLogFormValues)
   }
 
@@ -709,6 +742,24 @@ export function FuelLogsPage() {
                 {selectedFuelPriceQuery.error ? (
                   <p className="text-xs text-muted-foreground">Unable to auto-fill current fuel price for this vehicle type.</p>
                 ) : null}
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label>8-Week Fuel Price Trend</Label>
+                {fuelPriceTrendData.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Fuel price trend will appear after weekly history data is available.</p>
+                ) : (
+                  <div className="h-24 rounded-md border border-border/80 px-2 py-1">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={fuelPriceTrendData}>
+                        <XAxis dataKey="label" tickMargin={6} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(value) => `${formatPhpCurrency(Number(value ?? 0))}/L`} />
+                        <Line type="monotone" dataKey="diesel" name="Diesel" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="gasoline91" name="Gasoline 91" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

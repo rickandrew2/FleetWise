@@ -217,9 +217,44 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Avoid**: If RequireJS mismatch appears again, use a clean origin/profile (new port or incognito with extensions disabled) before assuming backend failure.
 - **Date**: 2026-04-12
 
+### [DB] New integration tests must clear dependent tables before users
+- **Symptom**: Backend suite failed in `FuelPriceControllerIntegrationTest` setup with `Referential integrity constraint violation ... FK_FUEL_LOGS_DRIVER` when deleting from `users`.
+- **Root Cause**: Shared Spring test context kept seeded rows in dependent tables (`fuel_logs`, `route_logs`, `alerts`, `vehicles`) that still referenced `users`.
+- **Fix**: In setup, delete tables in dependency order (`alerts`, `route_logs`, `fuel_logs`, `vehicles`, feature table) before `userRepository.deleteAll()`.
+- **Avoid**: Do not delete `users` first in integration tests that run in a shared in-memory DB context.
+- **Date**: 2026-04-12
+
 ### [CONFIG] Persistent pgAdmin spinner resolved by CloudBeaver fallback
 - **Symptom**: pgAdmin kept spinning in normal browser profiles even after cache and origin workarounds.
 - **Root Cause**: Client-side RequireJS/bootstrap conflicts can persist per browser profile and are hard to fully eliminate quickly.
 - **Fix**: Added `cloudbeaver` service in Docker Compose (`localhost:8978`) as the primary browser DB UI fallback.
 - **Avoid**: Do not block local DB browsing workflows on pgAdmin-only path when browser-specific script conflicts persist.
+- **Date**: 2026-04-12
+
+### [UI] Optional feature widgets must not block dashboard
+- **Symptom**: Dashboard rendered full-page `Unable to load dashboard` with 404 after adding fuel-price widgets.
+- **Root Cause**: Optional fuel-price queries were included in the dashboard's blocking error/loading gates.
+- **Fix**: Restrict blocking gates to core dashboard queries only (`summary`, `top-drivers`, `cost-trend`) and render fuel widgets with non-blocking fallback messaging.
+- **Avoid**: Do not include optional enrichment queries in top-level page failure gates.
+- **Date**: 2026-04-12
+
+### [UI] Dashboard fallback test was too strict for async label state
+- **Symptom**: `dashboard-page.test.tsx` failed with "Unable to find ... Estimated from recent fill-up logs" while the UI rendered "Recent fill-up fallback".
+- **Root Cause**: The test expected only the final fallback label, but the component can validly render an interim label before fallback queries finish.
+- **Fix**: Relaxed assertion to accept either valid label using regex (`/Recent fill-up fallback|Estimated from recent fill-up logs/`).
+- **Avoid**: Do not assert a single static label when component copy can legitimately vary across async fallback states.
+- **Date**: 2026-04-12
+
+### [BUILD] Optional email infrastructure should not block app startup
+- **Symptom**: Full backend test suite failed to boot Spring context with `No qualifying bean of type 'org.springframework.mail.javamail.JavaMailSender' available` after adding notification service.
+- **Root Cause**: `EmailNotificationService` used required constructor injection for `JavaMailSender`, but mail auto-configuration was not guaranteed in every environment.
+- **Fix**: Switched to optional injection (`@Autowired(required = false)`), guarded send path when mail sender is absent, and kept send failures non-blocking.
+- **Avoid**: Do not hard-require infrastructure beans for auxiliary features; provide a safe no-op path when integrations are unavailable.
+- **Date**: 2026-04-12
+
+### [API/AUTH] New endpoint returns 404 on stale backend runtime
+- **Symptom**: Settings page showed `Unable to load settings` with `Request failed with status code 404` for `/api/users/me/preferences`.
+- **Root Cause**: Browser was hitting an older Spring Boot process that did not include the new endpoint/migration yet.
+- **Fix**: Stopped the process on port 8080, restarted backend from current source (`mvnw.cmd spring-boot:run`), and verified endpoint presence via `/v3/api-docs`.
+- **Avoid**: After adding new controllers/routes, always restart the backend process and verify OpenAPI paths before debugging frontend code.
 - **Date**: 2026-04-12

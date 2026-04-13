@@ -28,6 +28,12 @@ public class User {
     @Column(length = 100, nullable = false, unique = true)
     private String email;
 
+    @Column(name = "notification_email", length = 100)
+    private String notificationEmail;
+
+    @Column(name = "email_notifications_enabled", nullable = false)
+    private Boolean emailNotificationsEnabled;
+
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
@@ -42,6 +48,9 @@ public class User {
     public void prePersist() {
         if (id == null) {
             id = UUID.randomUUID();
+        }
+        if (emailNotificationsEnabled == null) {
+            emailNotificationsEnabled = Boolean.FALSE;
         }
         if (createdAt == null) {
             createdAt = Instant.now();

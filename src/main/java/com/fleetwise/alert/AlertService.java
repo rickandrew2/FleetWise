@@ -3,6 +3,7 @@ package com.fleetwise.alert;
 import com.fleetwise.alert.dto.AlertResponse;
 import com.fleetwise.alert.dto.AlertUnreadCountResponse;
 import com.fleetwise.fuellog.FuelLog;
+import com.fleetwise.notification.EmailNotificationService;
 import com.fleetwise.route.RouteLog;
 import com.fleetwise.user.User;
 import com.fleetwise.user.UserRepository;
@@ -27,6 +28,7 @@ public class AlertService {
     private final AlertRepository alertRepository;
     private final VehicleRepository vehicleRepository;
     private final UserRepository userRepository;
+    private final EmailNotificationService emailNotificationService;
 
     @Value("${alert.high-cost-threshold:5000}")
     private BigDecimal highCostThreshold;
@@ -142,7 +144,20 @@ public class AlertService {
         alert.setThresholdValue(thresholdValue == null ? null : thresholdValue.setScale(2, RoundingMode.HALF_UP));
         alert.setActualValue(actualValue == null ? null : actualValue.setScale(2, RoundingMode.HALF_UP));
         alert.setIsRead(false);
-        alertRepository.save(alert);
+        Alert savedAlert = alertRepository.save(alert);
+        notifyRecipients(savedAlert);
+    }
+
+    private void notifyRecipients(Alert alert) {
+        if (alert.getDriverId() != null) {
+            userRepository.findById(alert.getDriverId())
+                    .ifPresent(user -> emailNotificationService.sendAlertNotification(user, alert));
+            return;
+        }
+
+        List<UserRole> fleetRoles = List.of(UserRole.ADMIN, UserRole.FLEET_MANAGER);
+        userRepository.findAllByRoleInAndEmailNotificationsEnabledTrue(fleetRoles)
+                .forEach(user -> emailNotificationService.sendAlertNotification(user, alert));
     }
 
     private User getCurrentUser(String email) {

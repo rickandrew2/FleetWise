@@ -7,6 +7,7 @@ export const ACCESS_RULES = {
   routes: ['ADMIN', 'FLEET_MANAGER', 'DRIVER'],
   alerts: ['ADMIN', 'FLEET_MANAGER', 'DRIVER'],
   reports: ['ADMIN', 'FLEET_MANAGER'],
+  settings: ['ADMIN', 'FLEET_MANAGER', 'DRIVER'],
 } as const satisfies Record<string, UserRole[]>
 
 export function hasRoleAccess(userRole: UserRole | null | undefined, allowedRoles: UserRole[]) {

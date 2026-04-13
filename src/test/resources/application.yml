@@ -14,3 +14,7 @@ spring:
 jwt:
   secret: this-is-a-test-jwt-secret-at-least-32-chars
   expiration-ms: 86400000
+
+notifications:
+  email:
+    enabled: false

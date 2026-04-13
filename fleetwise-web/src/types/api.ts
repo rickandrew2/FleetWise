@@ -26,6 +26,18 @@ export interface UserSummaryResponse {
   role: UserRole
 }
 
+export interface UserNotificationPreferencesResponse {
+  accountEmail: string
+  notificationEmail: string | null
+  effectiveNotificationEmail: string
+  emailNotificationsEnabled: boolean
+}
+
+export interface UpdateUserNotificationPreferencesRequest {
+  emailNotificationsEnabled: boolean
+  notificationEmail?: string | null
+}
+
 export interface ApiErrorResponse {
   status?: number
   message?: string

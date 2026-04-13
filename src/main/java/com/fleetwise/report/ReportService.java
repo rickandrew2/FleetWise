@@ -3,8 +3,10 @@ package com.fleetwise.report;
 import com.fleetwise.alert.AlertRepository;
 import com.fleetwise.fuellog.FuelLog;
 import com.fleetwise.fuellog.FuelLogRepository;
+import com.fleetwise.notification.EmailNotificationService;
 import com.fleetwise.route.RouteLog;
 import com.fleetwise.route.RouteLogRepository;
+import com.fleetwise.user.UserRepository;
 import com.fleetwise.report.dto.GenerateReportRequest;
 import com.fleetwise.report.dto.ReportJobResponse;
 import com.fleetwise.vehicle.VehicleRepository;
@@ -49,6 +51,8 @@ public class ReportService {
     private final AlertRepository alertRepository;
     private final PdfReportGenerator pdfReportGenerator;
     private final ExcelReportGenerator excelReportGenerator;
+    private final UserRepository userRepository;
+    private final EmailNotificationService emailNotificationService;
 
     @Value("${reports.output-path:target/reports-output}")
     private String reportsOutputPath;
@@ -114,7 +118,9 @@ public class ReportService {
             reportJob.setStatus(ReportStatus.COMPLETED);
             reportJob.setGeneratedAt(generatedAt);
             reportJob.setFilePath(zipPath.toString());
-            return reportJobRepository.save(reportJob);
+            ReportJob savedReportJob = reportJobRepository.save(reportJob);
+            notifyWeeklyReportRecipients(savedReportJob);
+            return savedReportJob;
         } catch (Exception ex) {
             log.error("Report generation failed for reportJobId={}", reportJob.getId(), ex);
             reportJob.setStatus(ReportStatus.FAILED);
@@ -201,6 +207,15 @@ public class ReportService {
             inputStream.transferTo(zipOutputStream);
         }
         zipOutputStream.closeEntry();
+    }
+
+    private void notifyWeeklyReportRecipients(ReportJob reportJob) {
+        if (reportJob.getReportType() != ReportType.WEEKLY || reportJob.getStatus() != ReportStatus.COMPLETED) {
+            return;
+        }
+
+        userRepository.findAllByEmailNotificationsEnabledTrue()
+                .forEach(user -> emailNotificationService.sendWeeklyReportNotification(user, reportJob));
     }
 
     private ReportJobResponse toResponse(ReportJob reportJob) {

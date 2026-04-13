@@ -25,17 +25,17 @@ Implement Feature 1 only in this cycle. Introduce a dedicated fuel price module 
 
 ## Acceptance Criteria
 
-- [ ] Tuesday scheduled fuel price update runs and persists prices.
-- [ ] Scrape failure still returns last successful prices with stale metadata.
-- [ ] New fuel price endpoints work with correct auth (admin-only writes).
-- [ ] Dashboard shows current PH fuel prices + 8-week Diesel/Gasoline 91 sparkline.
-- [ ] Fuel log form auto-fills price per liter from current fuel type price.
-- [ ] Feature 1 tests pass (backend + frontend) with no regressions.
+- [x] Tuesday scheduled fuel price update runs and persists prices.
+- [x] Scrape failure still returns last successful prices with stale metadata.
+- [x] New fuel price endpoints work with correct auth (admin-only writes).
+- [x] Dashboard shows current PH fuel prices + 8-week Diesel/Gasoline 91 sparkline.
+- [x] Fuel log form auto-fills price per liter from current fuel type price.
+- [x] Feature 1 tests pass (backend + frontend) with no regressions.
 
 ## Status
 
 - [ ] Not started
-- [x] In progress
-- [ ] Complete
+- [ ] In progress
+- [x] Complete
       Blockers (if any):
 - None

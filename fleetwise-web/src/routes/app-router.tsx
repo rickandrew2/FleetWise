@@ -11,6 +11,7 @@ const FuelLogsPage = lazy(async () => ({ default: (await import('@/pages/fuel-lo
 const RoutesPage = lazy(async () => ({ default: (await import('@/pages/routes-page')).RoutesPage }))
 const AlertsPage = lazy(async () => ({ default: (await import('@/pages/alerts-page')).AlertsPage }))
 const ReportsPage = lazy(async () => ({ default: (await import('@/pages/reports-page')).ReportsPage }))
+const SettingsPage = lazy(async () => ({ default: (await import('@/pages/settings-page')).SettingsPage }))
 const LoginPage = lazy(async () => ({ default: (await import('@/pages/login-page')).LoginPage }))
 const NotFoundPage = lazy(async () => ({ default: (await import('@/pages/not-found-page')).NotFoundPage }))
 
@@ -43,6 +44,9 @@ export function AppRouter() {
           </Route>
           <Route element={<ProtectedRoute allowedRoles={ACCESS_RULES.reports} />}>
             <Route path="/reports" element={<LazyPage><ReportsPage /></LazyPage>} />
+          </Route>
+          <Route element={<ProtectedRoute allowedRoles={ACCESS_RULES.settings} />}>
+            <Route path="/settings" element={<LazyPage><SettingsPage /></LazyPage>} />
           </Route>
         </Route>
       </Route>

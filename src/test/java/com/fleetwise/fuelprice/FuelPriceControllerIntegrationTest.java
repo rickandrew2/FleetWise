@@ -2,9 +2,13 @@ package com.fleetwise.fuelprice;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetwise.alert.AlertRepository;
+import com.fleetwise.fuellog.FuelLogRepository;
+import com.fleetwise.route.RouteLogRepository;
 import com.fleetwise.user.User;
 import com.fleetwise.user.UserRepository;
 import com.fleetwise.user.UserRole;
+import com.fleetwise.vehicle.VehicleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,10 +40,26 @@ class FuelPriceControllerIntegrationTest {
     private FuelPriceHistoryRepository fuelPriceHistoryRepository;
 
     @Autowired
+    private FuelLogRepository fuelLogRepository;
+
+    @Autowired
+    private RouteLogRepository routeLogRepository;
+
+    @Autowired
+    private AlertRepository alertRepository;
+
+    @Autowired
+    private VehicleRepository vehicleRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
+        alertRepository.deleteAll();
+        routeLogRepository.deleteAll();
+        fuelLogRepository.deleteAll();
+        vehicleRepository.deleteAll();
         fuelPriceHistoryRepository.deleteAll();
         userRepository.deleteAll();
 
@@ -68,30 +88,30 @@ class FuelPriceControllerIntegrationTest {
                 """;
 
         mockMvc.perform(post("/api/fuel-prices/manual-update")
-                        .header("Authorization", "Bearer " + managerToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(manualPayload))
+                .header("Authorization", "Bearer " + managerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(manualPayload))
                 .andExpect(status().isForbidden());
 
         String adminToken = loginAndGetToken("admin@fleetwise.test", "StrongPass123");
         mockMvc.perform(post("/api/fuel-prices/manual-update")
-                        .header("Authorization", "Bearer " + adminToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(manualPayload))
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(manualPayload))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.updatedRecords").value(4))
                 .andExpect(jsonPath("$.fallbackUsed").value(false));
 
         String driverToken = loginAndGetToken("driver@fleetwise.test", "StrongPass123");
         mockMvc.perform(get("/api/fuel-prices/current/DIESEL")
-                        .header("Authorization", "Bearer " + driverToken))
+                .header("Authorization", "Bearer " + driverToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fuelType").value("DIESEL"))
                 .andExpect(jsonPath("$.pricePerLiter").value(70.5))
                 .andExpect(jsonPath("$.source").value("DOE Weekly Advisory"));
 
         mockMvc.perform(get("/api/fuel-prices/history")
-                        .header("Authorization", "Bearer " + driverToken))
+                .header("Authorization", "Bearer " + driverToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].fuelType").exists())
                 .andExpect(jsonPath("$[0].averagePricePerLiter").isNumber());
@@ -115,8 +135,8 @@ class FuelPriceControllerIntegrationTest {
                 """.formatted(email, password);
 
         String response = mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

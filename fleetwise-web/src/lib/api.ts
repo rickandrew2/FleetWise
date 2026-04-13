@@ -29,7 +29,9 @@ import type {
   RouteLogStatsResponse,
   RouteLogUpsertRequest,
   TopDriverResponse,
+  UpdateUserNotificationPreferencesRequest,
   UserSummaryResponse,
+  UserNotificationPreferencesResponse,
   VehicleResponse,
   VehicleUpsertRequest,
 } from '@/types/api'
@@ -56,6 +58,18 @@ const userSummarySchema = z.object({
   name: z.string().nullable(),
   email: z.string().email(),
   role: z.enum(['ADMIN', 'FLEET_MANAGER', 'DRIVER']),
+})
+
+const userNotificationPreferencesSchema = z.object({
+  accountEmail: z.string().email(),
+  notificationEmail: z.string().email().nullable(),
+  effectiveNotificationEmail: z.string().email(),
+  emailNotificationsEnabled: z.boolean(),
+})
+
+const updateUserNotificationPreferencesSchema = z.object({
+  emailNotificationsEnabled: z.boolean(),
+  notificationEmail: z.string().email().nullable().optional(),
 })
 
 const epaLookupRequestSchema = z.object({
@@ -425,6 +439,21 @@ export async function vehiclesListRequest() {
 export async function usersListRequest() {
   const { data } = await api.get<UserSummaryResponse[]>('/api/users')
   return parseWithSchema(z.array(userSummarySchema), data, 'users list')
+}
+
+export async function userNotificationPreferencesRequest() {
+  const { data } = await api.get<UserNotificationPreferencesResponse>('/api/users/me/preferences')
+  return parseWithSchema(userNotificationPreferencesSchema, data, 'user notification preferences')
+}
+
+export async function updateUserNotificationPreferencesRequest(payload: UpdateUserNotificationPreferencesRequest) {
+  const safePayload = parseWithSchema(
+    updateUserNotificationPreferencesSchema,
+    payload,
+    'update user notification preferences payload',
+  )
+  const { data } = await api.put<UserNotificationPreferencesResponse>('/api/users/me/preferences', safePayload)
+  return parseWithSchema(userNotificationPreferencesSchema, data, 'user notification preferences')
 }
 
 export async function lookupEpaVehiclesRequest(payload: EpaLookupRequest) {
