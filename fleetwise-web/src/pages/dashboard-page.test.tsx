@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { DashboardPage } from '@/pages/dashboard-page'
 import {
   dashboardCostTrendRequest,
+  dashboardForecastRequest,
   dashboardSummaryRequest,
   dashboardTopDriversRequest,
   fuelLogsListRequest,
@@ -19,6 +20,7 @@ vi.mock('@/lib/api', async () => {
     dashboardSummaryRequest: vi.fn(),
     dashboardTopDriversRequest: vi.fn(),
     dashboardCostTrendRequest: vi.fn(),
+    dashboardForecastRequest: vi.fn(),
     fuelPricesCurrentRequest: vi.fn(),
     fuelPriceHistoryRequest: vi.fn(),
     vehiclesListRequest: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock('@/lib/api', async () => {
 const mockedSummary = vi.mocked(dashboardSummaryRequest)
 const mockedTopDrivers = vi.mocked(dashboardTopDriversRequest)
 const mockedCostTrend = vi.mocked(dashboardCostTrendRequest)
+const mockedForecast = vi.mocked(dashboardForecastRequest)
 const mockedFuelPricesCurrent = vi.mocked(fuelPricesCurrentRequest)
 const mockedFuelPriceHistory = vi.mocked(fuelPriceHistoryRequest)
 const mockedVehicles = vi.mocked(vehiclesListRequest)
@@ -57,6 +60,13 @@ describe('DashboardPage', () => {
       fleetEfficiencyScore: null,
       activeAlertsCount: 0,
     })
+    mockedForecast.mockResolvedValue({
+      projectedCost: 0,
+      basedOnMonths: 0,
+      avgLitersPerMonth: 0,
+      priceUsed: 0,
+      confidenceLevel: 'LOW',
+    })
     mockedTopDrivers.mockResolvedValue([])
     mockedCostTrend.mockResolvedValue([])
     mockedFuelPricesCurrent.mockResolvedValue([])
@@ -75,6 +85,13 @@ describe('DashboardPage', () => {
       monthToDateFuelCost: 120000,
       fleetEfficiencyScore: 1.03,
       activeAlertsCount: 2,
+    })
+    mockedForecast.mockResolvedValue({
+      projectedCost: 130000,
+      basedOnMonths: 3,
+      avgLitersPerMonth: 1800,
+      priceUsed: 72.2,
+      confidenceLevel: 'MEDIUM',
     })
     mockedTopDrivers.mockResolvedValue([])
     mockedCostTrend.mockResolvedValue([])

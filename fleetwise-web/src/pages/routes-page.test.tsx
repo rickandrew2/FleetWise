@@ -127,6 +127,8 @@ describe('RoutesPage', () => {
       actualFuelUsedLiters: 2.4,
       expectedFuelLiters: 2.1,
       efficiencyScore: 0.88,
+      weatherCondition: null,
+      temperatureCelsius: null,
       createdAt: '2026-04-11T10:05:00Z',
     })
     mockedDeleteRoute.mockResolvedValue(undefined)

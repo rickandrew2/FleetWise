@@ -2,6 +2,7 @@ package com.fleetwise.dashboard;
 
 import com.fleetwise.alert.AlertRepository;
 import com.fleetwise.dashboard.dto.CostTrendPointResponse;
+import com.fleetwise.dashboard.dto.DashboardForecastResponse;
 import com.fleetwise.dashboard.dto.DashboardSummaryResponse;
 import com.fleetwise.dashboard.dto.TopDriverResponse;
 import com.fleetwise.fuellog.FuelLog;
@@ -35,6 +36,7 @@ public class DashboardService {
         private final RouteLogRepository routeLogRepository;
         private final AlertRepository alertRepository;
         private final UserRepository userRepository;
+        private final ForecastService forecastService;
 
         @Transactional(readOnly = true)
         public DashboardSummaryResponse getSummary() {
@@ -122,5 +124,10 @@ public class DashboardService {
                 }
 
                 return trend;
+        }
+
+        @Transactional(readOnly = true)
+        public DashboardForecastResponse getForecast() {
+                return forecastService.forecastNextMonthCost();
         }
 }

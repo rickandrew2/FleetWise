@@ -8,7 +8,9 @@ import type {
   ApiErrorResponse,
   AuthResponse,
   CostTrendPointResponse,
+  DashboardForecastResponse,
   DashboardSummaryResponse,
+  DriverEfficiencyProfileResponse,
   DownloadedReport,
   EpaLookupRequest,
   EpaVehicleOptionResponse,
@@ -27,6 +29,8 @@ import type {
   ReportType,
   RouteLogResponse,
   RouteLogStatsResponse,
+  RouteEstimateRequest,
+  RouteEstimateResponse,
   RouteLogUpsertRequest,
   TopDriverResponse,
   UpdateUserNotificationPreferencesRequest,
@@ -89,6 +93,14 @@ const dashboardSummarySchema = z.object({
   monthToDateFuelCost: z.number(),
   fleetEfficiencyScore: z.number().nullable(),
   activeAlertsCount: z.number().int(),
+})
+
+const dashboardForecastSchema = z.object({
+  projectedCost: z.number(),
+  confidenceLevel: z.enum(['HIGH', 'MEDIUM', 'LOW']),
+  basedOnMonths: z.number().int().nonnegative(),
+  priceUsed: z.number(),
+  avgLitersPerMonth: z.number(),
 })
 
 const topDriverSchema = z.object({
@@ -178,7 +190,35 @@ const routeLogSchema = z.object({
   actualFuelUsedLiters: z.number().nullable(),
   expectedFuelLiters: z.number().nullable(),
   efficiencyScore: z.number().nullable(),
+  weatherCondition: z.string().nullable(),
+  temperatureCelsius: z.number().nullable(),
   createdAt: z.string(),
+})
+
+const routeEstimatePayloadSchema = z.object({
+  vehicleId: z.string().uuid(),
+  originLat: z.number().gte(-90).lte(90),
+  originLng: z.number().gte(-180).lte(180),
+  destinationLat: z.number().gte(-90).lte(90),
+  destinationLng: z.number().gte(-180).lte(180),
+})
+
+const routeEstimateSchema = z.object({
+  distanceKm: z.number(),
+  durationMin: z.number().int(),
+  expectedLiters: z.number().nullable(),
+  estimatedCost: z.number().nullable(),
+  currentPricePerLiter: z.number(),
+  vehicleName: z.string(),
+  fuelType: z.string(),
+})
+
+const driverEfficiencyProfileSchema = z.object({
+  driverId: z.string().uuid(),
+  avgScore30Days: z.number().nullable(),
+  stdDev: z.number().nullable(),
+  totalTrips: z.number().int().nonnegative(),
+  trend: z.enum(['IMPROVING', 'STABLE', 'DECLINING']),
 })
 
 const routeLogStatsSchema = z.object({
@@ -187,7 +227,7 @@ const routeLogStatsSchema = z.object({
   averageEfficiencyScore: z.number().nullable(),
 })
 
-const alertTypeSchema = z.enum(['OVERCONSUMPTION', 'HIGH_COST', 'MAINTENANCE_DUE', 'UNUSUAL_FILLUP'])
+const alertTypeSchema = z.enum(['OVERCONSUMPTION', 'PERSONAL_ANOMALY', 'HIGH_COST', 'MAINTENANCE_DUE', 'UNUSUAL_FILLUP'])
 
 const alertSchema = z.object({
   id: z.string().uuid(),
@@ -394,6 +434,11 @@ export async function dashboardSummaryRequest() {
   return parseWithSchema(dashboardSummarySchema, data, 'dashboard summary')
 }
 
+export async function dashboardForecastRequest() {
+  const { data } = await api.get<DashboardForecastResponse>('/api/dashboard/forecast')
+  return parseWithSchema(dashboardForecastSchema, data, 'dashboard forecast')
+}
+
 export async function fuelPricesCurrentRequest() {
   const { data } = await api.get<FuelPriceCurrentResponse[]>('/api/fuel-prices/current')
   return parseWithSchema(z.array(fuelPriceCurrentSchema), data, 'current fuel prices list')
@@ -516,6 +561,18 @@ export async function routeLogStatsRequest(filters?: LogQueryFilters) {
 export async function createRouteLogRequest(payload: RouteLogUpsertRequest) {
   const { data } = await api.post<RouteLogResponse>('/api/routes', payload)
   return parseWithSchema(routeLogSchema, data, 'route log create response')
+}
+
+export async function routeEstimateRequest(payload: RouteEstimateRequest) {
+  const safePayload = parseWithSchema(routeEstimatePayloadSchema, payload, 'route estimate payload')
+  const { data } = await api.post<RouteEstimateResponse>('/api/routes/estimate', safePayload)
+  return parseWithSchema(routeEstimateSchema, data, 'route estimate response')
+}
+
+export async function driverEfficiencyProfileRequest(driverId: string) {
+  const safeDriverId = parseWithSchema(z.string().uuid(), driverId, 'driver id')
+  const { data } = await api.get<DriverEfficiencyProfileResponse>(`/api/drivers/${safeDriverId}/efficiency-profile`)
+  return parseWithSchema(driverEfficiencyProfileSchema, data, 'driver efficiency profile')
 }
 
 export async function deleteRouteLogRequest(routeId: string) {

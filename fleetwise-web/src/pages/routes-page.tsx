@@ -7,20 +7,31 @@ import { z } from 'zod'
 import {
   createRouteLogRequest,
   deleteRouteLogRequest,
+  driverEfficiencyProfileRequest,
   parseApiError,
+  routeEstimateRequest,
   routeLogStatsRequest,
   routesListRequest,
   usersListRequest,
   vehiclesListRequest,
 } from '@/lib/api'
+import { formatPhpCurrency } from '@/lib/currency'
 import { notifyApiError, notifyError, notifySuccess } from '@/lib/notify'
 import { useAuth } from '@/providers/auth-provider'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
-import type { LogQueryFilters, RouteLogResponse, RouteLogUpsertRequest, UserSummaryResponse } from '@/types/api'
+import type {
+  DriverEfficiencyProfileResponse,
+  LogQueryFilters,
+  RouteEstimateResponse,
+  RouteLogResponse,
+  RouteLogUpsertRequest,
+  UserSummaryResponse,
+} from '@/types/api'
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/
 
@@ -110,10 +121,51 @@ function shortId(value: string | null) {
   return `${value.slice(0, 8)}...`
 }
 
+function weatherIcon(condition: string | null) {
+  switch (condition) {
+    case 'Clear Sky':
+      return '☀️'
+    case 'Partly Cloudy':
+      return '⛅'
+    case 'Foggy':
+      return '🌫️'
+    case 'Rainy':
+      return '🌧️'
+    case 'Rain Showers':
+      return '🌦️'
+    case 'Thunderstorm':
+      return '⛈️'
+    default:
+      return '🌤️'
+  }
+}
+
+function trendLabel(trend: DriverEfficiencyProfileResponse['trend']) {
+  if (trend === 'IMPROVING') {
+    return 'Improving'
+  }
+  if (trend === 'DECLINING') {
+    return 'Declining'
+  }
+  return 'Stable'
+}
+
+function trendBadgeClass(trend: DriverEfficiencyProfileResponse['trend']) {
+  if (trend === 'IMPROVING') {
+    return 'bg-emerald-100 text-emerald-900'
+  }
+  if (trend === 'DECLINING') {
+    return 'bg-red-100 text-red-900'
+  }
+  return 'bg-slate-100 text-slate-900'
+}
+
 export function RoutesPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [estimateResult, setEstimateResult] = useState<RouteEstimateResponse | null>(null)
+  const [estimateErrorMessage, setEstimateErrorMessage] = useState<string | null>(null)
   const [draftFilters, setDraftFilters] = useState<LogQueryFilters>(initialFilters)
   const [appliedFilters, setAppliedFilters] = useState<LogQueryFilters>(initialFilters)
   const [sortField, setSortField] = useState<RouteSortField>('tripDate')
@@ -146,10 +198,28 @@ export function RoutesPage() {
     queryFn: () => routeLogStatsRequest(appliedFilters),
   })
 
+  const driverIdsForProfiles = useMemo(
+    () => Array.from(new Set((routesQuery.data ?? []).map((route) => route.driverId).filter((driverId): driverId is string => Boolean(driverId)))),
+    [routesQuery.data],
+  )
+
+  const driverProfilesQuery = useQuery({
+    queryKey: ['driver-efficiency-profiles', [...driverIdsForProfiles].sort().join(',')],
+    enabled: driverIdsForProfiles.length > 0,
+    queryFn: async () => {
+      const entries = await Promise.all(
+        driverIdsForProfiles.map(async (driverId) => [driverId, await driverEfficiencyProfileRequest(driverId)] as const),
+      )
+      return Object.fromEntries(entries) as Record<string, DriverEfficiencyProfileResponse>
+    },
+  })
+
   const {
     register,
     handleSubmit,
     reset,
+    getValues,
+    watch,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<RouteLogFormValues>({
@@ -189,6 +259,26 @@ export function RoutesPage() {
     },
   })
 
+  const estimateMutation = useMutation({
+    mutationFn: routeEstimateRequest,
+    onSuccess: (result) => {
+      setEstimateResult(result)
+      setEstimateErrorMessage(null)
+    },
+    onError: (error) => {
+      const parsed = parseApiError(error)
+      setEstimateResult(null)
+      setEstimateErrorMessage(parsed.message || 'Unable to estimate route fuel cost.')
+      notifyApiError(parsed, 'Failed to calculate route estimate.')
+    },
+  })
+
+  const watchedVehicleId = watch('vehicleId')
+  const watchedOriginLat = watch('originLat')
+  const watchedOriginLng = watch('originLng')
+  const watchedDestinationLat = watch('destinationLat')
+  const watchedDestinationLng = watch('destinationLng')
+
   const vehicleLabelById = useMemo(() => {
     const data = vehiclesQuery.data ?? []
     return new Map(data.map((vehicle) => [vehicle.id, `${vehicle.plateNumber} • ${vehicle.make} ${vehicle.model}`]))
@@ -204,6 +294,14 @@ export function RoutesPage() {
     : user
       ? [{ id: user.userId, name: user.email, email: user.email, role: user.role }]
       : []
+  const driverLabelById = useMemo(() => {
+    const map = new Map<string, string>()
+    availableDrivers.forEach((driver) => {
+      map.set(driver.id, `${driver.name || 'Unknown'} • ${driver.email}`)
+    })
+    return map
+  }, [availableDrivers])
+  const driverProfilesById = driverProfilesQuery.data ?? {}
   const routes = routesQuery.data ?? EMPTY_ROUTES
   const stats = routeStatsQuery.data
   const canDelete = user?.role === 'ADMIN'
@@ -289,7 +387,41 @@ export function RoutesPage() {
 
   function closeCreateForm() {
     setIsCreateOpen(false)
+    setEstimateResult(null)
+    setEstimateErrorMessage(null)
     reset(initialRouteFormValues)
+  }
+
+  async function calculateEstimate() {
+    const values = getValues()
+    if (!values.vehicleId || !values.originLat || !values.originLng || !values.destinationLat || !values.destinationLng) {
+      notifyError('Select a vehicle and provide complete origin/destination coordinates before estimating.')
+      return
+    }
+
+    const originLat = Number(values.originLat)
+    const originLng = Number(values.originLng)
+    const destinationLat = Number(values.destinationLat)
+    const destinationLng = Number(values.destinationLng)
+
+    if (
+      Number.isNaN(originLat) ||
+      Number.isNaN(originLng) ||
+      Number.isNaN(destinationLat) ||
+      Number.isNaN(destinationLng)
+    ) {
+      notifyError('Coordinates must be valid numbers.')
+      return
+    }
+
+    setEstimateErrorMessage(null)
+    await estimateMutation.mutateAsync({
+      vehicleId: values.vehicleId,
+      originLat,
+      originLng,
+      destinationLat,
+      destinationLng,
+    })
   }
 
   function applyFilters() {
@@ -519,6 +651,7 @@ export function RoutesPage() {
                     <th className="px-4 py-3 font-semibold">Driver</th>
                     <th className="px-4 py-3 font-semibold">Origin</th>
                     <th className="px-4 py-3 font-semibold">Destination</th>
+                    <th className="px-4 py-3 font-semibold">Weather</th>
                     <th className="px-4 py-3 font-semibold">
                       <button
                         type="button"
@@ -549,11 +682,41 @@ export function RoutesPage() {
                     <tr key={route.id} className="border-t border-border/80">
                       <td className="px-4 py-3">{route.tripDate}</td>
                       <td className="px-4 py-3">{vehicleLabelById.get(route.vehicleId) || shortId(route.vehicleId)}</td>
-                      <td className="px-4 py-3">{shortId(route.driverId)}</td>
+                      <td className="px-4 py-3">
+                        {route.driverId ? (
+                          <div className="space-y-1">
+                            <p>{driverLabelById.get(route.driverId) || shortId(route.driverId)}</p>
+                            {driverProfilesById[route.driverId] ? (
+                              <Badge className={trendBadgeClass(driverProfilesById[route.driverId].trend)}>
+                                {trendLabel(driverProfilesById[route.driverId].trend)}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : (
+                          'N/A'
+                        )}
+                      </td>
                       <td className="px-4 py-3">{route.originLabel || `${route.originLat.toFixed(4)}, ${route.originLng.toFixed(4)}`}</td>
                       <td className="px-4 py-3">{route.destinationLabel || `${route.destinationLat.toFixed(4)}, ${route.destinationLng.toFixed(4)}`}</td>
+                      <td className="px-4 py-3">
+                        {route.weatherCondition ? (
+                          <p>
+                            {weatherIcon(route.weatherCondition)} {route.weatherCondition}
+                            {route.temperatureCelsius != null ? ` - ${route.temperatureCelsius.toFixed(0)}°C` : ''}
+                          </p>
+                        ) : (
+                          <span className="text-muted-foreground">N/A</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{toOneDecimal(route.distanceKm)} km</td>
-                      <td className="px-4 py-3">{toOneDecimal(route.efficiencyScore)}</td>
+                      <td className="px-4 py-3">
+                        <p>{toOneDecimal(route.efficiencyScore)}</p>
+                        {(route.weatherCondition === 'Rainy' || route.weatherCondition === 'Thunderstorm') &&
+                        route.efficiencyScore != null &&
+                        route.efficiencyScore > 1.2 ? (
+                          <p className="text-xs text-amber-700">⚠️ Score may be affected by weather conditions</p>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-3">
                         <Button
                           type="button"
@@ -688,6 +851,40 @@ export function RoutesPage() {
                 <Label>Driver</Label>
                 <Input value={user?.email || 'Unknown user'} readOnly disabled />
               </div>
+
+              <div className="sm:col-span-2 flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void calculateEstimate()
+                  }}
+                  disabled={
+                    estimateMutation.isPending ||
+                    !watchedVehicleId ||
+                    !watchedOriginLat ||
+                    !watchedOriginLng ||
+                    !watchedDestinationLat ||
+                    !watchedDestinationLng
+                  }
+                >
+                  Calculate Estimate
+                </Button>
+              </div>
+
+              {estimateResult ? (
+                <div className="sm:col-span-2 rounded-md border border-border/70 bg-secondary/20 p-3 text-sm">
+                  <p>📍 Distance: {toOneDecimal(estimateResult.distanceKm)} km  ⏱ Duration: ~{estimateResult.durationMin} min</p>
+                  <p>⛽ Expected fuel: {toOneDecimal(estimateResult.expectedLiters)} L  💰 Estimated cost: {formatPhpCurrency(estimateResult.estimatedCost ?? 0)}</p>
+                  <p className="text-muted-foreground">
+                    Based on current {estimateResult.fuelType} price: {formatPhpCurrency(estimateResult.currentPricePerLiter)}/L
+                  </p>
+                </div>
+              ) : null}
+
+              {estimateErrorMessage ? (
+                <p className="sm:col-span-2 text-sm text-destructive">{estimateErrorMessage}</p>
+              ) : null}
 
               <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" onClick={closeCreateForm}>

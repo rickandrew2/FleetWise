@@ -5,6 +5,7 @@ import com.fleetwise.alert.dto.AlertUnreadCountResponse;
 import com.fleetwise.fuellog.FuelLog;
 import com.fleetwise.notification.EmailNotificationService;
 import com.fleetwise.route.RouteLog;
+import com.fleetwise.route.RouteLogRepository;
 import com.fleetwise.user.User;
 import com.fleetwise.user.UserRepository;
 import com.fleetwise.user.UserRole;
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,10 +28,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AlertService {
 
+    private static final BigDecimal PERSONAL_ANOMALY_STDDEV_MULTIPLIER = new BigDecimal("1.50");
+    private static final ZoneId MANILA_ZONE = ZoneId.of("Asia/Manila");
+
     private final AlertRepository alertRepository;
     private final VehicleRepository vehicleRepository;
     private final UserRepository userRepository;
     private final EmailNotificationService emailNotificationService;
+    private final RouteLogRepository routeLogRepository;
 
     @Value("${alert.high-cost-threshold:5000}")
     private BigDecimal highCostThreshold;
@@ -127,6 +134,86 @@ public class AlertService {
                     overconsumptionThreshold,
                     routeLog.getEfficiencyScore());
         }
+
+        checkPersonalizedAnomaly(routeLog);
+    }
+
+    @Transactional
+    public void checkPersonalizedAnomaly(RouteLog routeLog) {
+        if (routeLog.getDriverId() == null || routeLog.getEfficiencyScore() == null) {
+            return;
+        }
+
+        LocalDate startDate = LocalDate.now(MANILA_ZONE).minusDays(30);
+        List<RouteLog> baselineRoutes = routeLogRepository.findEfficiencyLogsForDriverSince(
+                routeLog.getDriverId(),
+                startDate,
+                routeLog.getId());
+
+        if (baselineRoutes.size() < 3) {
+            return;
+        }
+
+        List<BigDecimal> baselineScores = baselineRoutes.stream()
+                .map(RouteLog::getEfficiencyScore)
+                .filter(score -> score != null)
+                .toList();
+
+        BigDecimal average = calculateAverage(baselineScores);
+        BigDecimal stdDev = calculateStdDev(baselineScores, average);
+        if (average == null || stdDev == null) {
+            return;
+        }
+
+        BigDecimal threshold = average
+                .add(stdDev.multiply(PERSONAL_ANOMALY_STDDEV_MULTIPLIER))
+                .setScale(2, RoundingMode.HALF_UP);
+
+        if (routeLog.getEfficiencyScore().compareTo(threshold) <= 0) {
+            return;
+        }
+
+        String driverName = userRepository.findById(routeLog.getDriverId())
+                .map(user -> user.getName() != null && !user.getName().isBlank() ? user.getName() : user.getEmail())
+                .orElse(routeLog.getDriverId().toString());
+
+        String message = String.format(
+                "Driver %s scored %.2f on this trip - significantly above their personal average of %.2f over the last 30 days",
+                driverName,
+                routeLog.getEfficiencyScore().doubleValue(),
+                average.doubleValue());
+
+        createAlert(
+                AlertType.PERSONAL_ANOMALY,
+                routeLog.getVehicleId(),
+                routeLog.getDriverId(),
+                message,
+                threshold,
+                routeLog.getEfficiencyScore());
+    }
+
+    private BigDecimal calculateAverage(List<BigDecimal> scores) {
+        if (scores.isEmpty()) {
+            return null;
+        }
+
+        BigDecimal total = scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return total.divide(BigDecimal.valueOf(scores.size()), 6, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateStdDev(List<BigDecimal> scores, BigDecimal average) {
+        if (scores.isEmpty() || average == null) {
+            return null;
+        }
+
+        BigDecimal variance = BigDecimal.ZERO;
+        for (BigDecimal score : scores) {
+            BigDecimal diff = score.subtract(average);
+            variance = variance.add(diff.multiply(diff));
+        }
+
+        variance = variance.divide(BigDecimal.valueOf(scores.size()), 6, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(Math.sqrt(variance.doubleValue())).setScale(6, RoundingMode.HALF_UP);
     }
 
     private void createAlert(

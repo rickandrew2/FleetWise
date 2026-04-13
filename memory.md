@@ -258,3 +258,10 @@ Allowed categories: [BUILD] [DB] [API/AUTH] [UI] [TYPE] [CONFIG] [OTHER]
 - **Fix**: Stopped the process on port 8080, restarted backend from current source (`mvnw.cmd spring-boot:run`), and verified endpoint presence via `/v3/api-docs`.
 - **Avoid**: After adding new controllers/routes, always restart the backend process and verify OpenAPI paths before debugging frontend code.
 - **Date**: 2026-04-12
+
+### [DB] Flyway ALTER TABLE syntax must be H2-compatible in tests
+- **Symptom**: Spring test context failed to boot with Flyway error on `V11__add_route_weather_context.sql`, showing H2 SQL syntax error on `ALTER TABLE ... ADD COLUMN ..., ADD COLUMN ...`.
+- **Root Cause**: H2 (used by integration tests) rejected the multi-column `ADD COLUMN` form used in a single `ALTER TABLE` statement.
+- **Fix**: Split the migration into two separate `ALTER TABLE ... ADD COLUMN ...;` statements, one per new column.
+- **Avoid**: Do not assume Postgres multi-column ALTER syntax will execute unchanged on H2-backed test runs.
+- **Date**: 2026-04-13

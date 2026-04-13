@@ -17,6 +17,14 @@ public interface FuelPriceHistoryRepository extends JpaRepository<FuelPriceHisto
     @Query("select max(f.effectiveDate) from FuelPriceHistory f where f.fuelType = :fuelType")
     Optional<LocalDate> findLatestEffectiveDateByFuelType(@Param("fuelType") FuelPriceType fuelType);
 
+    @Query("""
+            select max(f.effectiveDate) from FuelPriceHistory f
+            where f.fuelType = :fuelType and f.effectiveDate <= :effectiveDate
+            """)
+    Optional<LocalDate> findLatestEffectiveDateByFuelTypeOnOrBefore(
+            @Param("fuelType") FuelPriceType fuelType,
+            @Param("effectiveDate") LocalDate effectiveDate);
+
     List<FuelPriceHistory> findByFuelTypeAndEffectiveDateOrderByBrandAsc(FuelPriceType fuelType,
             LocalDate effectiveDate);
 

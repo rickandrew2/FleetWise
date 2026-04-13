@@ -1,7 +1,13 @@
 package com.fleetwise.route;
 
 import com.fleetwise.alert.AlertService;
+import com.fleetwise.fuelprice.FuelPriceService;
+import com.fleetwise.fuelprice.FuelPriceType;
+import com.fleetwise.fuelprice.dto.FuelPriceCurrentResponse;
 import com.fleetwise.fuellog.FuelLogRepository;
+import com.fleetwise.route.dto.DriverEfficiencyProfileResponse;
+import com.fleetwise.route.dto.RouteEstimateRequest;
+import com.fleetwise.route.dto.RouteEstimateResponse;
 import com.fleetwise.route.dto.RouteLogResponse;
 import com.fleetwise.route.dto.RouteLogStatsResponse;
 import com.fleetwise.route.dto.RouteLogUpsertRequest;
@@ -10,15 +16,17 @@ import com.fleetwise.user.UserRepository;
 import com.fleetwise.user.UserRole;
 import com.fleetwise.vehicle.Vehicle;
 import com.fleetwise.vehicle.VehicleRepository;
+import com.fleetwise.weather.RouteWeatherEnrichmentService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +35,8 @@ import java.util.UUID;
 public class RouteLogService {
 
     private static final BigDecimal MPG_TO_KM_PER_LITER = new BigDecimal("0.425143707");
+    private static final BigDecimal TREND_DELTA_THRESHOLD = new BigDecimal("0.05");
+    private static final ZoneId MANILA_ZONE = ZoneId.of("Asia/Manila");
 
     private final RouteLogRepository routeLogRepository;
     private final VehicleRepository vehicleRepository;
@@ -34,6 +44,8 @@ public class RouteLogService {
     private final FuelLogRepository fuelLogRepository;
     private final RouteDistanceCalculator routeDistanceCalculator;
     private final AlertService alertService;
+    private final FuelPriceService fuelPriceService;
+    private final RouteWeatherEnrichmentService routeWeatherEnrichmentService;
 
     @Transactional(readOnly = true)
     public List<RouteLogResponse> getRouteLogs(String currentEmail,
@@ -78,6 +90,69 @@ public class RouteLogService {
                 .toList();
     }
 
+            @Transactional(readOnly = true)
+            public RouteEstimateResponse estimateRoute(String currentEmail, RouteEstimateRequest request) {
+            getCurrentUser(currentEmail);
+
+            Vehicle vehicle = vehicleRepository.findById(request.vehicleId())
+                .orElseThrow(() -> new EntityNotFoundException("Vehicle not found"));
+
+            RouteDistanceCalculator.DistanceResult distanceResult = routeDistanceCalculator.calculate(
+                request.originLat(),
+                request.originLng(),
+                request.destinationLat(),
+                request.destinationLng());
+
+            BigDecimal distanceKm = toDecimal(distanceResult.distanceKm(), 2);
+            BigDecimal expectedFuelLiters = calculateExpectedFuel(distanceKm, vehicle.getCombinedMpg());
+
+            FuelPriceType fuelType = FuelPriceType.fromVehicleFuelType(vehicle.getFuelType())
+                .orElseThrow(() -> new IllegalStateException("Vehicle fuel type is not mapped to known fuel prices"));
+            FuelPriceCurrentResponse currentPrice = fuelPriceService.getCurrentPrice(fuelType);
+            BigDecimal currentPricePerLiter = BigDecimal.valueOf(currentPrice.pricePerLiter()).setScale(2, RoundingMode.HALF_UP);
+
+            BigDecimal estimatedCost = null;
+            if (expectedFuelLiters != null) {
+                estimatedCost = expectedFuelLiters.multiply(currentPricePerLiter).setScale(2, RoundingMode.HALF_UP);
+            }
+
+            return new RouteEstimateResponse(
+                toDouble(distanceKm),
+                distanceResult.estimatedDurationMin(),
+                toDouble(expectedFuelLiters),
+                toDouble(estimatedCost),
+                currentPrice.pricePerLiter(),
+                vehicleName(vehicle),
+                fuelType.displayName());
+            }
+
+            @Transactional(readOnly = true)
+            public DriverEfficiencyProfileResponse getDriverEfficiencyProfile(String currentEmail, UUID driverId) {
+            User currentUser = getCurrentUser(currentEmail);
+            UUID effectiveDriverId = resolveDriverFilter(currentUser, driverId);
+            if (effectiveDriverId == null) {
+                throw new IllegalArgumentException("driverId is required");
+            }
+
+            LocalDate startDate = LocalDate.now(MANILA_ZONE).minusDays(30);
+            List<RouteLog> logs = routeLogRepository.findEfficiencyLogsForDriverSince(effectiveDriverId, startDate, null);
+
+            List<BigDecimal> scores = logs.stream()
+                .map(RouteLog::getEfficiencyScore)
+                .filter(score -> score != null)
+                .toList();
+
+            BigDecimal avgScore = calculateAverage(scores);
+            BigDecimal stdDev = calculateStdDev(scores, avgScore);
+
+            return new DriverEfficiencyProfileResponse(
+                effectiveDriverId,
+                toDouble(avgScore),
+                toDouble(stdDev),
+                scores.size(),
+                calculateTrend(logs));
+            }
+
     @Transactional
     public RouteLogResponse createRouteLog(String currentEmail, RouteLogUpsertRequest request) {
         User currentUser = getCurrentUser(currentEmail);
@@ -119,6 +194,11 @@ public class RouteLogService {
 
         RouteLog savedRouteLog = routeLogRepository.save(routeLog);
         alertService.checkRouteLog(savedRouteLog);
+        routeWeatherEnrichmentService.enrichRouteWeatherAsync(
+            savedRouteLog.getId(),
+            request.originLat(),
+            request.originLng(),
+            request.tripDate());
 
         return toResponse(savedRouteLog);
     }
@@ -250,7 +330,75 @@ public class RouteLogService {
                 toDouble(routeLog.getActualFuelUsedLiters()),
                 toDouble(routeLog.getExpectedFuelLiters()),
                 toDouble(routeLog.getEfficiencyScore()),
+                routeLog.getWeatherCondition(),
+                toDouble(routeLog.getTemperatureCelsius()),
                 routeLog.getCreatedAt());
+    }
+
+    private BigDecimal calculateAverage(List<BigDecimal> scores) {
+        if (scores.isEmpty()) {
+            return null;
+        }
+
+        BigDecimal total = scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return total.divide(BigDecimal.valueOf(scores.size()), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateStdDev(List<BigDecimal> scores, BigDecimal average) {
+        if (scores.isEmpty() || average == null) {
+            return null;
+        }
+
+        BigDecimal variance = BigDecimal.ZERO;
+        for (BigDecimal score : scores) {
+            BigDecimal diff = score.subtract(average);
+            variance = variance.add(diff.multiply(diff));
+        }
+
+        variance = variance.divide(BigDecimal.valueOf(scores.size()), 6, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(Math.sqrt(variance.doubleValue())).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String calculateTrend(List<RouteLog> logs) {
+        List<BigDecimal> orderedScores = logs.stream()
+                .sorted((left, right) -> {
+                    int dateCompare = left.getTripDate().compareTo(right.getTripDate());
+                    if (dateCompare != 0) {
+                        return dateCompare;
+                    }
+                    return left.getCreatedAt().compareTo(right.getCreatedAt());
+                })
+                .map(RouteLog::getEfficiencyScore)
+                .filter(score -> score != null)
+                .toList();
+
+        if (orderedScores.size() < 3) {
+            return "STABLE";
+        }
+
+        int splitIndex = orderedScores.size() / 2;
+        if (splitIndex == 0 || splitIndex == orderedScores.size()) {
+            return "STABLE";
+        }
+
+        BigDecimal earlierAverage = calculateAverage(orderedScores.subList(0, splitIndex));
+        BigDecimal recentAverage = calculateAverage(orderedScores.subList(splitIndex, orderedScores.size()));
+        if (earlierAverage == null || recentAverage == null) {
+            return "STABLE";
+        }
+
+        BigDecimal delta = recentAverage.subtract(earlierAverage);
+        if (delta.compareTo(TREND_DELTA_THRESHOLD.negate()) <= 0) {
+            return "IMPROVING";
+        }
+        if (delta.compareTo(TREND_DELTA_THRESHOLD) >= 0) {
+            return "DECLINING";
+        }
+        return "STABLE";
+    }
+
+    private String vehicleName(Vehicle vehicle) {
+        return vehicle.getPlateNumber() + " • " + vehicle.getMake() + " " + vehicle.getModel();
     }
 
     private BigDecimal toDecimal(Double value, int scale) {

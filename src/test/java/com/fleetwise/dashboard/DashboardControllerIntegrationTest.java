@@ -115,6 +115,13 @@ class DashboardControllerIntegrationTest {
                 .header("Authorization", "Bearer " + managerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(6));
+
+        mockMvc.perform(get("/api/dashboard/forecast")
+            .header("Authorization", "Bearer " + managerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.projectedCost").isNumber())
+            .andExpect(jsonPath("$.confidenceLevel").isString())
+            .andExpect(jsonPath("$.basedOnMonths").isNumber());
     }
 
     private User seedUser(String email, UserRole role) {

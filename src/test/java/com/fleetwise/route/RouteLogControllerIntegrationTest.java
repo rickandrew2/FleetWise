@@ -2,6 +2,9 @@ package com.fleetwise.route;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetwise.fuelprice.FuelPriceHistory;
+import com.fleetwise.fuelprice.FuelPriceHistoryRepository;
+import com.fleetwise.fuelprice.FuelPriceType;
 import com.fleetwise.fuellog.FuelLog;
 import com.fleetwise.fuellog.FuelLogRepository;
 import com.fleetwise.user.User;
@@ -20,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -50,6 +54,9 @@ class RouteLogControllerIntegrationTest {
         private RouteLogRepository routeLogRepository;
 
         @Autowired
+        private FuelPriceHistoryRepository fuelPriceHistoryRepository;
+
+        @Autowired
         private PasswordEncoder passwordEncoder;
 
         private User adminUser;
@@ -63,6 +70,7 @@ class RouteLogControllerIntegrationTest {
                 routeLogRepository.deleteAll();
                 fuelLogRepository.deleteAll();
                 vehicleRepository.deleteAll();
+                fuelPriceHistoryRepository.deleteAll();
                 userRepository.deleteAll();
 
                 adminUser = seedUser("admin@fleetwise.test", UserRole.ADMIN);
@@ -71,6 +79,7 @@ class RouteLogControllerIntegrationTest {
                 secondDriverUser = seedUser("driver2@fleetwise.test", UserRole.DRIVER);
                 vehicle = seedVehicle();
                 seedFuelLog(vehicle, driverUser, LocalDate.of(2026, 4, 11), new BigDecimal("18.00"));
+                seedFuelPrice(FuelPriceType.DIESEL, "70.00", LocalDate.of(2026, 4, 10));
         }
 
         @Test
@@ -179,6 +188,26 @@ class RouteLogControllerIntegrationTest {
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$[0].driverId").value(driverUser.getId().toString()));
 
+                                                                String estimatePayload = """
+                                                                                                                                {
+                                                                                                                                        "vehicleId": "%s",
+                                                                                                                                        "originLat": 13.7565,
+                                                                                                                                        "originLng": 121.0583,
+                                                                                                                                        "destinationLat": 13.9411,
+                                                                                                                                        "destinationLng": 121.1636
+                                                                                                                                }
+                                                                                                                                """.formatted(vehicle.getId());
+
+                                                                mockMvc.perform(post("/api/routes/estimate")
+                                                                                                                                .header("Authorization", "Bearer " + managerToken)
+                                                                                                                                .contentType(MediaType.APPLICATION_JSON)
+                                                                                                                                .content(estimatePayload))
+                                                                                                                                .andExpect(status().isOk())
+                                                                                                                                .andExpect(jsonPath("$.distanceKm").isNumber())
+                                                                                                                                .andExpect(jsonPath("$.durationMin").isNumber())
+                                                                                                                                .andExpect(jsonPath("$.currentPricePerLiter").value(70.0))
+                                                                                                                                .andExpect(jsonPath("$.vehicleName").value("ROUTE-001 • Toyota Hilux"));
+
                 mockMvc.perform(get("/api/routes/" + managerRouteLogId)
                                 .header("Authorization", "Bearer " + driverToken))
                                 .andExpect(status().isNotFound());
@@ -223,6 +252,17 @@ class RouteLogControllerIntegrationTest {
                 fuelLog.setPricePerLiter(new BigDecimal("65.00"));
                 fuelLog.setTotalCost(litersFilled.multiply(new BigDecimal("65.00")));
                 fuelLogRepository.save(fuelLog);
+        }
+
+        private void seedFuelPrice(FuelPriceType fuelType, String pricePerLiter, LocalDate effectiveDate) {
+                FuelPriceHistory history = new FuelPriceHistory();
+                history.setId(UUID.randomUUID());
+                history.setFuelType(fuelType);
+                history.setPricePerLiter(new BigDecimal(pricePerLiter));
+                history.setBrand("DOE Average");
+                history.setEffectiveDate(effectiveDate);
+                history.setSource("Test Seed");
+                fuelPriceHistoryRepository.save(history);
         }
 
         private String loginAndGetToken(String email, String password) throws Exception {

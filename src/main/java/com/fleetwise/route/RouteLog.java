@@ -64,6 +64,12 @@ public class RouteLog {
     @Column(name = "efficiency_score", precision = 5, scale = 2)
     private BigDecimal efficiencyScore;
 
+    @Column(name = "weather_condition", length = 40)
+    private String weatherCondition;
+
+    @Column(name = "temperature_celsius", precision = 5, scale = 2)
+    private BigDecimal temperatureCelsius;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

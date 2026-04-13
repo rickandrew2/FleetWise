@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, T
 import { RefreshCcw, TrendingUp, Wallet, TriangleAlert, CircleGauge } from 'lucide-react'
 import {
   dashboardCostTrendRequest,
+  dashboardForecastRequest,
   dashboardSummaryRequest,
   dashboardTopDriversRequest,
   fuelLogsListRequest,
@@ -14,6 +15,7 @@ import {
 } from '@/lib/api'
 import { formatPhpCurrency } from '@/lib/currency'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
 
@@ -42,6 +44,16 @@ function normalizeFuelType(rawFuelType: string | null | undefined) {
   }
 }
 
+function confidenceBadgeClass(confidence: 'HIGH' | 'MEDIUM' | 'LOW') {
+  if (confidence === 'HIGH') {
+    return 'bg-emerald-100 text-emerald-900'
+  }
+  if (confidence === 'MEDIUM') {
+    return 'bg-amber-100 text-amber-900'
+  }
+  return 'bg-red-100 text-red-900'
+}
+
 export function DashboardPage() {
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
@@ -58,6 +70,11 @@ export function DashboardPage() {
     queryFn: dashboardCostTrendRequest,
   })
 
+  const forecastQuery = useQuery({
+    queryKey: ['dashboard', 'forecast'],
+    queryFn: dashboardForecastRequest,
+  })
+
   const fuelPricesQuery = useQuery({
     queryKey: ['fuel-prices', 'current'],
     queryFn: fuelPricesCurrentRequest,
@@ -68,7 +85,7 @@ export function DashboardPage() {
     queryFn: fuelPriceHistoryRequest,
   })
 
-  const hasBlockingError = summaryQuery.error || topDriversQuery.error || costTrendQuery.error
+  const hasBlockingError = summaryQuery.error || topDriversQuery.error || costTrendQuery.error || forecastQuery.error
   const hasFuelPriceError = Boolean(fuelPricesQuery.error || fuelPriceHistoryQuery.error)
 
   const fallbackVehiclesQuery = useQuery({
@@ -82,7 +99,7 @@ export function DashboardPage() {
     queryFn: () => fuelLogsListRequest(),
     enabled: hasFuelPriceError,
   })
-  const isLoading = summaryQuery.isLoading || topDriversQuery.isLoading || costTrendQuery.isLoading
+  const isLoading = summaryQuery.isLoading || topDriversQuery.isLoading || costTrendQuery.isLoading || forecastQuery.isLoading
 
   const trendData = useMemo(
     () => (costTrendQuery.data ?? []).map((point) => ({ ...point, label: formatMonthLabel(point.month) })),
@@ -188,6 +205,7 @@ export function DashboardPage() {
       summaryQuery.refetch(),
       topDriversQuery.refetch(),
       costTrendQuery.refetch(),
+      forecastQuery.refetch(),
       fuelPricesQuery.refetch(),
       fuelPriceHistoryQuery.refetch(),
     ])
@@ -209,6 +227,7 @@ export function DashboardPage() {
   }
 
   const summary = summaryQuery.data
+  const forecast = forecastQuery.data
   const topDrivers = topDriversQuery.data ?? []
   const hasNoTrendData = trendData.length === 0
 
@@ -288,6 +307,28 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </section>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardDescription>Next Month Forecast</CardDescription>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle className="text-2xl">{formatPhpCurrency(forecast?.projectedCost ?? 0)}</CardTitle>
+            <Badge className={confidenceBadgeClass(forecast?.confidenceLevel ?? 'LOW')}>
+              {forecast?.confidenceLevel ?? 'LOW'}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>Based on 3-month average consumption at current DOE prices.</p>
+          <p>
+            Basis: {forecast?.basedOnMonths ?? 0} month(s), avg {forecast?.avgLitersPerMonth?.toFixed(1) ?? '0.0'} L/month,
+            blended price {formatPhpCurrency(forecast?.priceUsed ?? 0)}/L
+          </p>
+          {forecast?.confidenceLevel === 'LOW' ? (
+            <p className="text-amber-700">Not enough data for reliable forecast - add more fuel logs.</p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

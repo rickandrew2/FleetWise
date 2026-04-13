@@ -20,5 +20,7 @@ public record RouteLogResponse(
         Double actualFuelUsedLiters,
         Double expectedFuelLiters,
         Double efficiencyScore,
+        String weatherCondition,
+        Double temperatureCelsius,
         Instant createdAt) {
 }

@@ -50,6 +50,14 @@ export interface DashboardSummaryResponse {
   activeAlertsCount: number
 }
 
+export interface DashboardForecastResponse {
+  projectedCost: number
+  confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW'
+  basedOnMonths: number
+  priceUsed: number
+  avgLitersPerMonth: number
+}
+
 export interface TopDriverResponse {
   driverId: string
   driverName: string
@@ -195,7 +203,35 @@ export interface RouteLogResponse {
   actualFuelUsedLiters: number | null
   expectedFuelLiters: number | null
   efficiencyScore: number | null
+  weatherCondition: string | null
+  temperatureCelsius: number | null
   createdAt: string
+}
+
+export interface RouteEstimateRequest {
+  vehicleId: string
+  originLat: number
+  originLng: number
+  destinationLat: number
+  destinationLng: number
+}
+
+export interface RouteEstimateResponse {
+  distanceKm: number
+  durationMin: number
+  expectedLiters: number | null
+  estimatedCost: number | null
+  currentPricePerLiter: number
+  vehicleName: string
+  fuelType: string
+}
+
+export interface DriverEfficiencyProfileResponse {
+  driverId: string
+  avgScore30Days: number | null
+  stdDev: number | null
+  totalTrips: number
+  trend: 'IMPROVING' | 'STABLE' | 'DECLINING'
 }
 
 export interface RouteLogUpsertRequest {
@@ -217,7 +253,7 @@ export interface RouteLogStatsResponse {
   averageEfficiencyScore: number | null
 }
 
-export type AlertType = 'OVERCONSUMPTION' | 'HIGH_COST' | 'MAINTENANCE_DUE' | 'UNUSUAL_FILLUP'
+export type AlertType = 'OVERCONSUMPTION' | 'PERSONAL_ANOMALY' | 'HIGH_COST' | 'MAINTENANCE_DUE' | 'UNUSUAL_FILLUP'
 
 export interface AlertResponse {
   id: string

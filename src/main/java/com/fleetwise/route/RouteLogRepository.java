@@ -36,5 +36,18 @@ public interface RouteLogRepository extends JpaRepository<RouteLog, UUID> {
                         @Param("driverId") UUID driverId,
                         Pageable pageable);
 
+        @Query("""
+                        select r from RouteLog r
+                        where r.driverId = :driverId
+                          and r.tripDate >= :startDate
+                          and r.efficiencyScore is not null
+                          and (:excludeRouteId is null or r.id <> :excludeRouteId)
+                        order by r.tripDate desc, r.createdAt desc
+                        """)
+        List<RouteLog> findEfficiencyLogsForDriverSince(
+                        @Param("driverId") UUID driverId,
+                        @Param("startDate") LocalDate startDate,
+                        @Param("excludeRouteId") UUID excludeRouteId);
+
         Optional<RouteLog> findByIdAndDriverId(UUID id, UUID driverId);
 }

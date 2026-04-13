@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { PageEmptyState, PageErrorState, PageLoadingState } from '@/components/ui/page-state'
 import type { AlertQueryFilters, AlertType, UserSummaryResponse } from '@/types/api'
-const alertTypeOptions: AlertType[] = ['OVERCONSUMPTION', 'HIGH_COST', 'MAINTENANCE_DUE', 'UNUSUAL_FILLUP']
+const alertTypeOptions: AlertType[] = ['OVERCONSUMPTION', 'PERSONAL_ANOMALY', 'HIGH_COST', 'MAINTENANCE_DUE', 'UNUSUAL_FILLUP']
 
 type AlertDraftFilters = {
   alertType: AlertType | ''
@@ -65,6 +65,16 @@ function formatAlertType(value: AlertType) {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function alertTypeBadgeClass(alertType: AlertType) {
+  if (alertType === 'PERSONAL_ANOMALY') {
+    return 'bg-indigo-100 text-indigo-900'
+  }
+  if (alertType === 'OVERCONSUMPTION') {
+    return 'bg-amber-100 text-amber-900'
+  }
+  return 'bg-slate-100 text-slate-900'
 }
 
 export function AlertsPage() {
@@ -399,7 +409,7 @@ export function AlertsPage() {
                         />
                       </td>
                       <td className="px-4 py-3">{new Date(alert.triggeredAt).toLocaleString()}</td>
-                      <td className="px-4 py-3"><Badge variant="secondary">{formatAlertType(alert.alertType)}</Badge></td>
+                      <td className="px-4 py-3"><Badge className={alertTypeBadgeClass(alert.alertType)}>{formatAlertType(alert.alertType)}</Badge></td>
                       <td className="px-4 py-3">
                         <p className="font-medium">{alert.message}</p>
                         <p className="text-xs text-muted-foreground">

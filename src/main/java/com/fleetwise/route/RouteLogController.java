@@ -3,6 +3,9 @@ package com.fleetwise.route;
 import com.fleetwise.route.dto.RouteLogResponse;
 import com.fleetwise.route.dto.RouteLogStatsResponse;
 import com.fleetwise.route.dto.RouteLogUpsertRequest;
+import com.fleetwise.route.dto.RouteEstimateRequest;
+import com.fleetwise.route.dto.RouteEstimateResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -41,11 +44,20 @@ public class RouteLogController {
     }
 
     @PostMapping
+    @Operation(summary = "Create route log")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMIN','FLEET_MANAGER','DRIVER')")
     public RouteLogResponse createRouteLog(Authentication authentication,
             @Valid @RequestBody RouteLogUpsertRequest request) {
         return routeLogService.createRouteLog(authentication.getName(), request);
+    }
+
+    @PostMapping("/estimate")
+    @Operation(summary = "Estimate route fuel use and cost before saving")
+    @PreAuthorize("hasAnyRole('ADMIN','FLEET_MANAGER','DRIVER')")
+    public RouteEstimateResponse estimateRoute(Authentication authentication,
+            @Valid @RequestBody RouteEstimateRequest request) {
+        return routeLogService.estimateRoute(authentication.getName(), request);
     }
 
     @GetMapping("/{id}")
